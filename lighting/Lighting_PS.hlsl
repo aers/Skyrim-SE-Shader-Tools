@@ -69,10 +69,10 @@ struct PS_OUTPUT
 #endif
 };
 
-float3 DirectionalLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightPower, float3 a_Position, float3 a_Normal)
+float3 DirectionalLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightRadius, float3 a_Position, float3 a_Normal)
 {
     float3 v_lightDirection = a_LightPosition - a_Position;
-    float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / a_lightPower), 2);
+    float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / a_lightRadius), 2);
     float3 v_lightDirectionN = normalize(v_lightDirection);
     float v_lightIntensity = saturate(dot(a_Normal, v_lightDirectionN));
     return a_lightColor * v_lightIntensity * v_lightAttenuation;
