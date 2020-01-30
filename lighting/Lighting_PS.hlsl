@@ -69,6 +69,15 @@ struct PS_OUTPUT
 #endif
 };
 
+float3 DirectionalLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightPower, float3 a_Position, float3 a_Normal)
+{
+    float3 v_lightDirection = a_LightPosition - a_Position;
+    float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / a_lightPower), 2);
+    float3 v_lightDirectionN = normalize(v_lightDirection);
+    float v_lightIntensity = saturate(dot(a_Normal, v_lightDirectionN));
+    return a_lightColor * v_lightIntensity * v_lightAttenuation;
+}
+
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
@@ -91,16 +100,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     // directional light
     float v_DirectionalLightIntensity = saturate(dot(v_CommonSpaceNormal.xyz, DirLightDirection.xyz));
-    v_DiffuseAccumulator = DirLightColor.xyz *v_DirectionalLightIntensity;
+    v_DiffuseAccumulator = DirLightColor.xyz * v_DirectionalLightIntensity;
 
     // point lights
     for (int currentLight = 0; currentLight < v_TotalLightCount; currentLight++)
     {
-        float3 LightDirectionVec = PointLightPosition[currentLight].xyz - input.ModelSpaceVertexPos;
-        float LightAttenuation = 1 - pow(saturate(length(LightDirectionVec) / PointLightPosition[currentLight].w), 2);
-        float3 n_LightDirectionVec = normalize(LightDirectionVec);
-        float LightIntensity = saturate(dot(v_CommonSpaceNormal.xyz, n_LightDirectionVec.xyz));
-        v_DiffuseAccumulator += PointLightColor[currentLight].xyz * LightIntensity * LightAttenuation;
+        v_DiffuseAccumulator += DirectionalLightDiffuse(PointLightPosition[currentLight].xyz, PointLightColor[currentLight].xyz, PointLightPosition[currentLight].w, input.ModelSpaceVertexPos.xyz, v_CommonSpaceNormal.xyz);
     }
 
     v_CommonSpaceNormal.w = 1;
@@ -112,7 +117,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
         dot(DirectionalAmbient[1].xyzw, v_CommonSpaceNormal.xyzw),
         dot(DirectionalAmbient[2].xyzw, v_CommonSpaceNormal.xyzw)
         );
-    v_DiffuseAccumulator += EmitColor.xyz + DirectionalAmbientNormal.xyz;
+    v_DiffuseAccumulator += DirectionalAmbientNormal.xyz;
+
+    v_DiffuseAccumulator += EmitColor.xyz;
 
     // IBL
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
@@ -166,13 +173,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // SSRParams.y = fSpecMaskSpan + fSpecMaskBegin
     // SSRParams.w = 1.0 or fSpecularLODFade if RAW_FLAG_SPECULAR
     float v_SpecMaskBegin = SSRParams.x - 0.000010;
-    float v_SpecMaskSpan = SSRParams.y - v_SpecMaskBegin;
+    float v_SpecMaskSpan = SSRParams.y;
     // specularity is in the normal alpha
-    float v_AdjustedSpecularity = v_Normal.w - v_SpecMaskSpan;
 
-    float v_MaskedSpec = pow(saturate(v_AdjustedSpecularity * (1 / v_SpecMaskSpan)) * -2 + 3, 2) * v_SpecMaskSpan;
-
-    output.Normal.w = SSRParams.w * v_MaskedSpec;
+    output.Normal.w = SSRParams.w * smoothstep(v_SpecMaskBegin, v_SpecMaskSpan, v_Normal.w);
 
     // view space normal map
     v_ViewSpaceNormal.z = v_ViewSpaceNormal.z * -8 + 8;
