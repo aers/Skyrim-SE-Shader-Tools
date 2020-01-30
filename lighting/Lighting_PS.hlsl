@@ -1,21 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// only NONE technique, no flags
-
-// note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled
-#if defined(SPECULAR) || defined(ENVMAP) || defined(PARALLAX) || defined(PARALLAX_OCC) || defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(MULTILAYERPARALLAX) || defined(EYE)
-#define HAS_VIEW_DIRECTION_VECTOR_OUTPUT
-#endif
-
-#if defined(SKINNED) || defined(ENVMAP) || defined(EYE) || defined(MULTILAYERPARALLAX)
-#define DRAW_IN_WORLDSPACE
-#endif
-
-// this transform is primarly used to take normals into common space
-// since common space is model space by default, its not present if there are model space normals and the shader is not drawing in world space
-#if defined(DRAW_IN_WORLDSPACE) || !defined(MODELSPACENORMALS)
-#define HAS_COMMON_TRANSFORM
-#endif
+#include "Common.h"
+#include "LightingCommon.h"
 
 // Dynamic buffer: sizeof() = 32 (0x20)
 cbuffer PerTechnique : register(b0)
@@ -68,87 +54,10 @@ cbuffer PerGeometry : register(b2)
     float2 NumLightNumShadowLight                : packoffset(c29);     // @ 116 - 0x01D0
 }
 
-cbuffer PerFrame : register(b12)
-{
-    row_major float4x4 ViewMatrix							: packoffset(c0);
-    row_major float4x4 ProjMatrix                           : packoffset(c4);
-    row_major float4x4 ViewProjMatrix                       : packoffset(c8);
-    row_major float4x4 ViewProjMatrixUnjittered             : packoffset(c12);
-    row_major float4x4 PreviousViewProjMatrixUnjittered     : packoffset(c16);
-    row_major float4x4 InvProjMatrixUnjittered              : packoffset(c20);
-    row_major float4x4 ProjMatrixUnjittered                 : packoffset(c24);
-    row_major float4x4 InvViewMatrix                        : packoffset(c28);
-    row_major float4x4 InvViewProjMatrix                    : packoffset(c32);
-    row_major float4x4 InvProjMatrix                        : packoffset(c36);
-    float4   CurrentPosAdjust                               : packoffset(c40);
-    float4   PreviousPosAdjust                              : packoffset(c41);
-    float4   Unk42                                          : packoffset(c42);
-    float4   Unk43                                          : packoffset(c43);
-    float4   Unk44                                          : packoffset(c44);
-}
-
 SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
 Texture2D<float4> TexNormalSampler : register(t1);
-
-struct PS_INPUT
-{
-    precise float4 ProjVertexPos            : SV_POSITION0;
-#if defined(MULTI_TEXTURE) || defined(PROJECTED_UV)
-    float4 TexCoords                        : TEXCOORD0;
-#else
-    float2 TexCoords                        : TEXCOORD0;
-#endif
-#if defined(DRAW_IN_WORLDSPACE)
-    precise float3 WorldSpaceVertexPos      : TEXCOORD4;
-#elif defined(WORLD_MAP)
-    precise float3 WorldMapVertexPos        : TEXCOORD4;
-#else
-    precise float3 ModelSpaceVertexPos      : TEXCOORD4;
-#endif
-#if defined(HAS_COMMON_TRANSFORM)
-#if defined(MODELSPACENORMALS)
-    float3 ModelWorldTransform0             : TEXCOORD1;
-    float3 ModelWorldTransform1             : TEXCOORD2;
-    float3 ModelWorldTransform2             : TEXCOORD3;
-#elif defined(DRAW_IN_WORLDSPACE)
-    float3 TangentWorldTransform0           : TEXCOORD1;
-    float3 TangentWorldTransform1           : TEXCOORD2;
-    float3 TangentWorldTransform2           : TEXCOORD3;
-#else
-    float3 TangentModelTransform0           : TEXCOORD1;
-    float3 TangentModelTransform1           : TEXCOORD2;
-    float3 TangentModelTransform2           : TEXCOORD3;
-#endif
-#endif
-#if defined(HAS_VIEW_DIRECTION_VECTOR_OUTPUT)
-    float3 ViewDirectionVec                 : TEXCOORD5;
-#endif
-#if defined(MULTI_TEXTURE)
-    float4 BlendWeight0                     : TEXCOORD6;
-    float4 BlendWeight1                     : TEXCOORD7;
-#endif
-#if defined(EYE)
-    float3 EyeDirectionVec                  : TEXCOORD6;
-#endif
-#if defined(PROJECTED_UV)
-    float3 ProjDir                          : TEXCOORD7;
-#endif
-#if defined(MODELSPACENORMALS)
-    float3 ModelViewTransform0              : TEXCOORD8;
-    float3 ModelViewTransform1              : TEXCOORD9;
-    float3 ModelViewTransform2              : TEXCOORD10;
-#else
-    float3 TangentViewTransform0            : TEXCOORD8;
-    float3 TangentViewTransform1            : TEXCOORD9;
-    float3 TangentViewTransform2            : TEXCOORD10;
-#endif
-    precise float4 WorldVertexPos           : POSITION1;
-    precise float4 PreviousWorldVertexPos   : POSITION2;
-    float4 VertexColor                      : COLOR0;
-    float4 FogParam                         : COLOR1;
-};
 
 struct PS_OUTPUT
 {
@@ -222,19 +131,21 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float2 v_MotionVector = (v_CurrProjPosition - v_PrevProjPosition) * float2(-0.5, 0.5);
 
     // fog
+    // SE implements fog as an imagespace shader after the main lighting pass so this is wasted on 95%~ of lighting shader runs
     float v_FogAmount = input.FogParam.w;
     float3 v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
-    float3 v_FogAdjustedDiffuse = v_OutDiffuse - v_FogDiffuse * FogColor.w;
+    float3 v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
+ 
+    // FirstPerson seems to be 1 regardless of 1st/3rd person in SE, could be LE legacy code or a bug
+    // AlphaPass is 0 before the fog imagespace shader runs and 1 after
+    float FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
+    float AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z;
 
     // ColorOutputClamp.x = fLightingOutputColourClampPostLit
-    // CLEANUP
-    float3 v_Unk = v_FogAdjustedDiffuse * Unk42.y + ColourOutputClamp.x;
-    float3 v_Unk2 = v_FogAdjustedDiffuse * Unk42.y;
-
-    v_OutDiffuse = min(v_OutDiffuse, v_Unk);
+    v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.x);
 
     output.Color.w = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
-    output.Color.xyz = v_OutDiffuse - (v_Unk2 * Unk42.z);
+    output.Color.xyz = v_OutDiffuse - (v_FogDiffuseDiff * FirstPerson * AlphaPass);
 
     if (SSRParams.z > 0.000010)
     {
@@ -250,22 +161,20 @@ PS_OUTPUT PSMain(PS_INPUT input)
         dot(input.TangentViewTransform1.xyz, v_Normal.xyz),
         dot(input.TangentViewTransform2.xyz, v_Normal.xyz)));
 
-    // CLEANUP
+    // specular map for SSR
     // SSRParams.x = fSpecMaskBegin
     // SSRParams.y = fSpecMaskSpan + fSpecMaskBegin
     // SSRParams.w = 1.0 or fSpecularLODFade if RAW_FLAG_SPECULAR
-    float v_SpecMask1 = SSRParams.x - 0.000010;
-    float v_SpecMask2 = SSRParams.y - v_SpecMask1;
-    v_SpecMask1 = v_Normal.w - v_SpecMask2;
-    v_SpecMask2 = 1 / v_SpecMask2;
-    v_SpecMask1 = saturate(v_SpecMask1 * v_SpecMask2);
-    v_SpecMask2 = v_SpecMask1 * -2 + 3;
-    v_SpecMask1 = pow(v_SpecMask1, 2);
-    v_SpecMask1 = v_SpecMask1 * v_SpecMask2;
+    float v_SpecMaskBegin = SSRParams.x - 0.000010;
+    float v_SpecMaskSpan = SSRParams.y - v_SpecMaskBegin;
+    // specularity is in the normal alpha
+    float v_AdjustedSpecularity = v_Normal.w - v_SpecMaskSpan;
 
-    // note that normal alpha = specular
-    output.Normal.w = SSRParams.w * v_SpecMask1;
+    float v_MaskedSpec = pow(saturate(v_AdjustedSpecularity * (1 / v_SpecMaskSpan)) * -2 + 3, 2) * v_SpecMaskSpan;
 
+    output.Normal.w = SSRParams.w * v_MaskedSpec;
+
+    // view space normal map
     v_ViewSpaceNormal.z = v_ViewSpaceNormal.z * -8 + 8;
     v_ViewSpaceNormal.z = sqrt(v_ViewSpaceNormal.z);
     v_ViewSpaceNormal.z = max(0.001, v_ViewSpaceNormal.z);
