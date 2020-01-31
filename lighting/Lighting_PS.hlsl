@@ -58,6 +58,8 @@ SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
 Texture2D<float4> TexNormalSampler : register(t1);
+SamplerState ProjectedNoiseSampler : register(s11);
+Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 
 struct PS_OUTPUT
 {
@@ -69,18 +71,30 @@ struct PS_OUTPUT
 #endif
 };
 
-float3 DirectionalLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightRadius, float3 a_Position, float3 a_Normal)
+float3 DirectionalLightDiffuse(float3 a_lightDirectionN, a_lightColor, a_Normal)
+{
+    float v_LightIntensity = saturate(dot(a_Normal, a_lightDirectionN));
+    return a_lightColor * v_lightIntensity;
+}
+
+float3 PointLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightRadius, float3 a_Position, float3 a_Normal)
 {
     float3 v_lightDirection = a_LightPosition - a_Position;
     float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / a_lightRadius), 2);
     float3 v_lightDirectionN = normalize(v_lightDirection);
-    float v_lightIntensity = saturate(dot(a_Normal, v_lightDirectionN));
-    return a_lightColor * v_lightIntensity * v_lightAttenuation;
+    return DirectionalLightDiffuse(v_lightDirectionN, a_lightColor, a_Normal) * v_lightAttenuation;
 }
 
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
+
+#if defined(HAS_VIEW_DIRECTION_VECTOR_OUTPUT)
+    float3 v_ViewDirectionVec = input.ViewDirectionVec;
+#else
+    // sometimes used for calculations when there's no actual view direction vec
+    float3 v_ViewDirectionVec = float3(1, 1, 1);
+#endif
 
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, input.TexCoords.xy).xyzw;
     float4 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
@@ -99,14 +113,31 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_DiffuseAccumulator = 0;
 
     // directional light
-    float v_DirectionalLightIntensity = saturate(dot(v_CommonSpaceNormal.xyz, DirLightDirection.xyz));
-    v_DiffuseAccumulator = DirLightColor.xyz * v_DirectionalLightIntensity;
+    v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColor.xyz, v_CommonSpaceNormal.xyz);
 
     // point lights
     for (int currentLight = 0; currentLight < v_TotalLightCount; currentLight++)
     {
-        v_DiffuseAccumulator += DirectionalLightDiffuse(PointLightPosition[currentLight].xyz, PointLightColor[currentLight].xyz, PointLightPosition[currentLight].w, input.ModelSpaceVertexPos.xyz, v_CommonSpaceNormal.xyz);
+        v_DiffuseAccumulator += PointLightDiffuse(PointLightPosition[currentLight].xyz, PointLightColor[currentLight].xyz, PointLightPosition[currentLight].w, input.ModelSpaceVertexPos.xyz, v_CommonSpaceNormal.xyz);
     }
+
+    // toggled by cl on/off
+    // brightens the output
+#if defined(CHARACTER_LIGHT)
+    float CharacterLightingStrengthPrimary = CharacterLightParams.x;
+    float CharacterLightingStrengthSecondary = CharacterLightParams.y;
+    float CharacterLightingStrengthLuminance = CharacterLightParams.z;
+    float CharacterLightingStrengthMaxLuminance = CharacterLightParams.w;
+
+    float VdotN = saturate(dot(normalize(v_ViewDirectionVec), v_CommonSpaceNormal.xyz));
+    // TODO: these constants are probably something simple
+    float SecondaryIntensity = saturate(dot(float2(0.164399, -0.986394), v_CommonSpaceNormal.yz));
+
+    float CharacterLightingStrength = VdotN * CharacterLightingStrengthPrimary + SecondaryIntensity * CharacterLightingStrengthSecondary;
+    float Noise = TexProjectedNoiseSampler.Sample(ProjectedNoiseSampler, float2(1, 1)).x;
+    float CharacterLightingLuminance = clamp(CharacterLightingStrengthLuminance * Noise, 0, CharacterLightingStrengthMaxLuminance);
+    v_DiffuseAccumulator += CharacterLightingStrength * CharacterLightingLuminance;
+#endif
 
     v_CommonSpaceNormal.w = 1;
 
