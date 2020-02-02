@@ -75,7 +75,7 @@ struct PS_OUTPUT
 
 float3 DirectionalLightDiffuse(float3 a_lightDirectionN, float3 a_lightColor, float3 a_Normal)
 {
-    float v_LightIntensity = saturate(dot(a_Normal, a_lightDirectionN));
+    float v_lightIntensity = saturate(dot(a_Normal, a_lightDirectionN));
     return a_lightColor * v_lightIntensity;
 }
 
@@ -83,12 +83,10 @@ float3 DirectionalLightSpecular(float3 a_lightDirectionN, float3 a_lightColor, f
 {
     float3 v_halfAngle = normalize(a_lightDirectionN + a_viewDirectionN);
     float v_specIntensity = saturate(dot(v_halfAngle, a_Normal));
-    float v_spec = pow(specIntensity, a_specularPower);
+    float v_spec = pow(v_specIntensity, a_specularPower);
 
     return a_lightColor * v_spec;
 }
-
-float3 PointLightSpecular(float3 a_lightPosition, float3 a_lightColor, )
 
 PS_OUTPUT PSMain(PS_INPUT input)
 {
@@ -209,7 +207,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SPECULAR)
     v_OutDiffuse += v_OutSpecular * SpecularColor.xyz;
     v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
-    v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuseP * FogColor.w;
+    v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
 
     // ColourOutputClamp.z = fLightingOutputColourClampPostSpec
     v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.z);
