@@ -58,8 +58,10 @@ SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
 Texture2D<float4> TexNormalSampler : register(t1);
+#if defined(CHARACTER_LIGHT)
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
+#endif
 
 struct PS_OUTPUT
 {
@@ -71,29 +73,32 @@ struct PS_OUTPUT
 #endif
 };
 
-float3 DirectionalLightDiffuse(float3 a_lightDirectionN, a_lightColor, a_Normal)
+float3 DirectionalLightDiffuse(float3 a_lightDirectionN, float3 a_lightColor, float3 a_Normal)
 {
     float v_LightIntensity = saturate(dot(a_Normal, a_lightDirectionN));
     return a_lightColor * v_lightIntensity;
 }
 
-float3 PointLightDiffuse(float3 a_lightPosition, float3 a_lightColor, float a_lightRadius, float3 a_Position, float3 a_Normal)
+float3 DirectionalLightSpecular(float3 a_lightDirectionN, float3 a_lightColor, float a_specularPower, float3 a_viewDirectionN, float3 a_Normal)
 {
-    float3 v_lightDirection = a_LightPosition - a_Position;
-    float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / a_lightRadius), 2);
-    float3 v_lightDirectionN = normalize(v_lightDirection);
-    return DirectionalLightDiffuse(v_lightDirectionN, a_lightColor, a_Normal) * v_lightAttenuation;
+    float3 v_halfAngle = normalize(a_lightDirectionN + a_viewDirectionN);
+    float v_specIntensity = saturate(dot(v_halfAngle, a_Normal));
+    float v_spec = pow(specIntensity, a_specularPower);
+
+    return a_lightColor * v_spec;
 }
+
+float3 PointLightSpecular(float3 a_lightPosition, float3 a_lightColor, )
 
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
 
 #if defined(HAS_VIEW_DIRECTION_VECTOR_OUTPUT)
-    float3 v_ViewDirectionVec = input.ViewDirectionVec;
+    float3 v_ViewDirectionVec = normalize(input.ViewDirectionVec);
 #else
     // sometimes used for calculations when there's no actual view direction vec
-    float3 v_ViewDirectionVec = float3(1, 1, 1);
+    float3 v_ViewDirectionVec = normalize(float3(1, 1, 1));
 #endif
 
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, input.TexCoords.xy).xyzw;
@@ -112,13 +117,28 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3 v_DiffuseAccumulator = 0;
 
+#if defined(SPECULAR)
+    float3 v_SpecularAccumulator = 0;
+#endif
+
     // directional light
     v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColor.xyz, v_CommonSpaceNormal.xyz);
+
+#if defined(SPECULAR)
+    v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
 
     // point lights
     for (int currentLight = 0; currentLight < v_TotalLightCount; currentLight++)
     {
-        v_DiffuseAccumulator += PointLightDiffuse(PointLightPosition[currentLight].xyz, PointLightColor[currentLight].xyz, PointLightPosition[currentLight].w, input.ModelSpaceVertexPos.xyz, v_CommonSpaceNormal.xyz);
+        float3 v_lightDirection = PointLightPosition[currentLight].xyz - input.ModelSpaceVertexPos.xyz;
+        float v_lightRadius = PointLightPosition[currentLight].w;
+        float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
+        float3 v_lightDirectionN = normalize(v_lightDirection);
+        v_DiffuseAccumulator += v_lightAttenuation * DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
+#if defined(SPECULAR)
+        v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, PointLightColor[currentLight].xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
     }
 
     // toggled by cl on/off
@@ -129,7 +149,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float CharacterLightingStrengthLuminance = CharacterLightParams.z;
     float CharacterLightingStrengthMaxLuminance = CharacterLightParams.w;
 
-    float VdotN = saturate(dot(normalize(v_ViewDirectionVec), v_CommonSpaceNormal.xyz));
+    float VdotN = saturate(dot(v_ViewDirectionVec, v_CommonSpaceNormal.xyz));
     // TODO: these constants are probably something simple
     float SecondaryIntensity = saturate(dot(float2(0.164399, -0.986394), v_CommonSpaceNormal.yz));
 
@@ -156,6 +176,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * input.VertexColor.xyz;
+#if defined(SPECULAR)
+    float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_Normal.w * MaterialData.y;
+#endif
 
     // motion vector
     float2 v_CurrProjPosition = float2(
@@ -168,20 +191,31 @@ PS_OUTPUT PSMain(PS_INPUT input)
         / dot(PreviousViewProjMatrixUnjittered[3].xyzw, input.PreviousWorldVertexPos.xyzw);
     float2 v_MotionVector = (v_CurrProjPosition - v_PrevProjPosition) * float2(-0.5, 0.5);
 
-    // fog
-    // SE implements fog as an imagespace shader after the main lighting pass so this is wasted on 95%~ of lighting shader runs
-    float v_FogAmount = input.FogParam.w;
-    float3 v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
-    float3 v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
- 
     // FirstPerson seems to be 1 regardless of 1st/3rd person in SE, could be LE legacy code or a bug
     // AlphaPass is 0 before the fog imagespace shader runs and 1 after
     float FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
     float AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z;
 
+    // fog
+    // SE implements fog as an imagespace shader after the main lighting pass so this is wasted on 95%~ of lighting shader runs
+    // this code is probably actually completely different then this, its just what it compiled to, needs refactor probably
+    float v_FogAmount = input.FogParam.w;
+    float3 v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
+    float3 v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
+
     // ColorOutputClamp.x = fLightingOutputColourClampPostLit
     v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.x);
 
+#if defined(SPECULAR)
+    v_OutDiffuse += v_OutSpecular * SpecularColor.xyz;
+    v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
+    v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuseP * FogColor.w;
+
+    // ColourOutputClamp.z = fLightingOutputColourClampPostSpec
+    v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.z);
+#endif
+
+    // MaterialData.z = LightingProperty Alpha
     output.Color.w = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
     output.Color.xyz = v_OutDiffuse - (v_FogDiffuseDiff * FirstPerson * AlphaPass);
 
