@@ -58,6 +58,10 @@ SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
 Texture2D<float4> TexNormalSampler : register(t1);
+#if defined(MODELSPACENORMALS
+SamplerState SpecularSampler : register(s2);
+Texture2D<float4> TexSpecularSampler : register(t2);
+#endif)
 #if defined(CHARACTER_LIGHT)
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
@@ -100,18 +104,48 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, input.TexCoords.xy).xyzw;
+
+#if defined(MODELSPACENORMALS)
+    float3 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
+#else
     float4 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
+#endif
 
     v_Normal.xyz = v_Normal.xyz * 2 - 1;
+
+#if defined(MODELSPACENORMALS)
+    float v_SpecularPower = TexSpecularSampler.Sample(SpecularSampler, input.TexCoords.xy).x;
+#else
+    float v_SpecularPower = v_Normal.w;
+#endif
 
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
 
     float4 v_CommonSpaceNormal;
     
+#if defined(MODELSPACENORMALS)
+#if defined(DRAW_IN_WORLDSPACE) 
+    v_CommonSpaceNormal.xyz = normalize(float3(
+        dot(input.ModelWorldTransform0.xyz, v_Normal.xyz),
+        dot(input.ModelWorldTransform1.xyz, v_Normal.xyz),
+        dot(input.ModelWorldTransform2.xyz, v_Normal.xyz)
+        ));
+#else
+    v_CommonSpaceNormal.xyz = v_Normal.xyz;
+#endif
+#elif defined(DRAW_IN_WORLDSPACE)
+    v_CommonSpaceNormal.xyz = normalize(float3(
+        dot(input.TangentWorldTransform0.xyz, v_Normal.xyz),
+        dot(input.TangentWorldTransform1.xyz, v_Normal.xyz),
+        dot(input.TangentWorldTransform2.xyz, v_Normal.xyz)
+        ));
+#else
     v_CommonSpaceNormal.xyz = normalize(float3(
         dot(input.TangentModelTransform0.xyz, v_Normal.xyz),
         dot(input.TangentModelTransform1.xyz, v_Normal.xyz),
-        dot(input.TangentModelTransform2.xyz, v_Normal.xyz)));
+        dot(input.TangentModelTransform2.xyz, v_Normal.xyz)
+        ));
+#endif
 
     float3 v_DiffuseAccumulator = 0;
 
@@ -175,7 +209,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * input.VertexColor.xyz;
 #if defined(SPECULAR)
-    float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_Normal.w * MaterialData.y;
+    float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
 #endif
 
     // motion vector
@@ -239,7 +273,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_SpecMaskSpan = SSRParams.y;
     // specularity is in the normal alpha
 
-    output.Normal.w = SSRParams.w * smoothstep(v_SpecMaskBegin, v_SpecMaskSpan, v_Normal.w);
+    output.Normal.w = SSRParams.w * smoothstep(v_SpecMaskBegin, v_SpecMaskSpan, v_SpecularPower);
 
     // view space normal map
     v_ViewSpaceNormal.z = v_ViewSpaceNormal.z * -8 + 8;
