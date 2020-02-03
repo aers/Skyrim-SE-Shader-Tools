@@ -194,11 +194,11 @@ VS_OUTPUT VSMain(VS_INPUT input)
 #endif
 
 #if defined(WORLD_MAP)
-    vsout.WorldMapVertexPos.xyz = mul(v_World4x4, v_VertexPos).xyz + WorldMapOverlayParameters.xyz;
+    vsout.WorldMapVertexPos = mul(v_World4x4, v_VertexPos).xyz + WorldMapOverlayParameters.xyz;
 #elif defined(DRAW_IN_WORLDSPACE)
-    vsout.WorldSpaceVertexPos.xyz = v_VertexPos.xyz;
+    vsout.WorldSpaceVertexPos = v_VertexPos.xyz;
 #else
-    vsout.ModelSpaceVertexPos.xyz = v_VertexPos.xyz;
+    vsout.ModelSpaceVertexPos = v_VertexPos.xyz;
 #endif
 
 #if defined(HAS_COMMON_TRANSFORM)
@@ -212,13 +212,13 @@ VS_OUTPUT VSMain(VS_INPUT input)
 #endif
 #if defined(MODELSPACENORMALS)
 #if defined(SKINNED)
-    vsout.ModelWorldTransform0.xyz = normalize(ModelToSkinnedWorldMatrix[0].xyz);
-    vsout.ModelWorldTransform1.xyz = normalize(ModelToSkinnedWorldMatrix[1].xyz);
-    vsout.ModelWorldTransform2.xyz = normalize(ModelToSkinnedWorldMatrix[2].xyz);
+    vsout.ModelWorldTransform0 = normalize(ModelToSkinnedWorldMatrix[0].xyz);
+    vsout.ModelWorldTransform1 = normalize(ModelToSkinnedWorldMatrix[1].xyz);
+    vsout.ModelWorldTransform2 = normalize(ModelToSkinnedWorldMatrix[2].xyz);
 #else
-    vsout.ModelWorldTransform0.xyz = World[0].xyz;
-    vsout.ModelWorldTransform1.xyz = World[1].xyz;
-    vsout.ModelWorldTransform2.xyz = World[2].xyz;
+    vsout.ModelWorldTransform0 = World[0].xyz;
+    vsout.ModelWorldTransform1 = World[1].xyz;
+    vsout.ModelWorldTransform2 = World[2].xyz;
 #endif
 #elif defined(DRAW_IN_WORLDSPACE)
 #if defined(SKINNED)
@@ -233,14 +233,14 @@ VS_OUTPUT VSMain(VS_INPUT input)
     // tbn is usually tangent, bitangent, normal but bethesda shaders use btn
     // we want this transposed since the transform is Tangent->X not X->Tangent
     float3x3 w_tbn = transpose(float3x3(w_bitangent, w_tangent, w_normal));
-    vsout.TangentWorldTransform0.xyz = w_tbn[0];
-    vsout.TangentWorldTransform1.xyz = w_tbn[1];
-    vsout.TangentWorldTransform2.xyz = w_tbn[2];
+    vsout.TangentWorldTransform0 = w_tbn[0];
+    vsout.TangentWorldTransform1 = w_tbn[1];
+    vsout.TangentWorldTransform2 = w_tbn[2];
 #else
     float3x3 tbn = transpose(float3x3(bitangent, tangent, normal));
-    vsout.TangentModelTransform0.xyz = tbn[0];
-    vsout.TangentModelTransform1.xyz = tbn[1];
-    vsout.TangentModelTransform2.xyz = tbn[2];
+    vsout.TangentModelTransform0 = tbn[0];
+    vsout.TangentModelTransform1 = tbn[1];
+    vsout.TangentModelTransform2 = tbn[2];
 #endif
 #endif
 
@@ -279,9 +279,9 @@ VS_OUTPUT VSMain(VS_INPUT input)
 #else
     float3x3 ModelViewMatrix = mul(ViewMatrix, v_World4x4);
 #endif
-    vsout.ModelViewTransform0.xyz = ModelViewMatrix[0];
-    vsout.ModelViewTransform1.xyz = ModelViewMatrix[1];
-    vsout.ModelViewTransform2.xyz = ModelViewMatrix[2];
+    vsout.ModelViewTransform0 = ModelViewMatrix[0];
+    vsout.ModelViewTransform1 = ModelViewMatrix[1];
+    vsout.ModelViewTransform2 = ModelViewMatrix[2];
 #else
 #if defined(DRAW_IN_WORLDSPACE)
     float3x3 TangentModelViewMatrix = mul(ViewMatrix, w_tbn);
@@ -289,9 +289,9 @@ VS_OUTPUT VSMain(VS_INPUT input)
     float3x3 ModelViewMatrix = mul(ViewMatrix, v_World4x4);
     float3x3 TangentModelViewMatrix = mul(ModelViewMatrix, tbn);
 #endif
-    vsout.TangentViewTransform0.xyz = TangentModelViewMatrix[0];
-    vsout.TangentViewTransform1.xyz = TangentModelViewMatrix[1];
-    vsout.TangentViewTransform2.xyz = TangentModelViewMatrix[2];
+    vsout.TangentViewTransform0 = TangentModelViewMatrix[0];
+    vsout.TangentViewTransform1 = TangentModelViewMatrix[1];
+    vsout.TangentViewTransform2 = TangentModelViewMatrix[2];
 #endif
 
 #if defined(DRAW_IN_WORLDSPACE)
