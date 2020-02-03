@@ -73,49 +73,53 @@ cbuffer PerFrame : register(b12)
 struct VS_OUTPUT
 {
     precise float4 ProjVertexPos : SV_POSITION0;
+#if defined(MULTI_TEXTURE) || defined(PROJECTED_UV)
     float4 TexCoords : TEXCOORD0;
-#if defined(DRAW_IN_WORLDSPACE)
-    precise float4 WorldSpaceVertexPos : TEXCOORD4;
-#elif defined(WORLD_MAP)
-    precise float4 WorldMapVertexPos : TEXCOORD4;
 #else
-    precise float4 ModelSpaceVertexPos : TEXCOORD4;
+    float2 TexCoords : TEXCOORD0;
+#endif
+#if defined(DRAW_IN_WORLDSPACE)
+    precise float3 WorldSpaceVertexPos : TEXCOORD4;
+#elif defined(WORLD_MAP)
+    precise float3 WorldMapVertexPos : TEXCOORD4;
+#else
+    precise float3 ModelSpaceVertexPos : TEXCOORD4;
 #endif
 #if defined(HAS_COMMON_TRANSFORM)
 #if defined(MODELSPACENORMALS)
-    float4 ModelWorldTransform0 : TEXCOORD1;
-    float4 ModelWorldTransform1 : TEXCOORD2;
-    float4 ModelWorldTransform2 : TEXCOORD3;
+    float3 ModelWorldTransform0 : TEXCOORD1;
+    float3 ModelWorldTransform1 : TEXCOORD2;
+    float3 ModelWorldTransform2 : TEXCOORD3;
 #elif defined(DRAW_IN_WORLDSPACE)
-    float4 TangentWorldTransform0 : TEXCOORD1;
-    float4 TangentWorldTransform1 : TEXCOORD2;
-    float4 TangentWorldTransform2 : TEXCOORD3;
+    float3 TangentWorldTransform0 : TEXCOORD1;
+    float3 TangentWorldTransform1 : TEXCOORD2;
+    float3 TangentWorldTransform2 : TEXCOORD3;
 #else
-    float4 TangentModelTransform0 : TEXCOORD1;
-    float4 TangentModelTransform1 : TEXCOORD2;
-    float4 TangentModelTransform2 : TEXCOORD3;
+    float3 TangentModelTransform0 : TEXCOORD1;
+    float3 TangentModelTransform1 : TEXCOORD2;
+    float3 TangentModelTransform2 : TEXCOORD3;
 #endif
 #endif
 #if defined(HAS_VIEW_DIRECTION_VECTOR_OUTPUT)
-    float4 ViewDirectionVec : TEXCOORD5;
+    float3 ViewDirectionVec : TEXCOORD5;
 #endif
 #if defined(MULTI_TEXTURE)
     float4 BlendWeight0 : TEXCOORD6;
     float4 BlendWeight1 : TEXCOORD7;
 #endif
 #if defined(EYE)
-    float4 EyeDirectionVec : TEXCOORD6;
+    float3 EyeDirectionVec : TEXCOORD6;
 #endif
 #if defined(PROJECTED_UV)
-    float4 ProjDir : TEXCOORD7;
+    float3 ProjDir : TEXCOORD7;
 #endif
 #if defined(MODELSPACENORMALS)
-    float4 ModelViewTransform0 : TEXCOORD8;
-    float4 ModelViewTransform1 : TEXCOORD9;
+    float3 ModelViewTransform0 : TEXCOORD8;
+    float3 ModelViewTransform1 : TEXCOORD9;
     float3 ModelViewTransform2 : TEXCOORD10;
 #else
-    float4 TangentViewTransform0 : TEXCOORD8;
-    float4 TangentViewTransform1 : TEXCOORD9;
+    float3 TangentViewTransform0 : TEXCOORD8;
+    float3 TangentViewTransform1 : TEXCOORD9;
     float3 TangentViewTransform2 : TEXCOORD10;
 #endif
     precise float4 WorldVertexPos : POSITION1;
