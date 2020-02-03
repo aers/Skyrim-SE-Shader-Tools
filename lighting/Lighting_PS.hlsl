@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: MODELSPACENORMALS, SPECULAR, CHARACTER_LIGHT, SKINNED
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, PROJECTED_UV, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -158,6 +158,15 @@ PS_OUTPUT PSMain(PS_INPUT input)
         ));
 #endif
 
+    float3 v_CommonSpaceVertexPos;
+
+#if defined(DRAW_IN_WORLDSPACE)
+    v_CommonSpaceVertexPos = input.WorldSpaceVertexPos;
+#else
+    v_CommonSpaceVertexPos = input.ModelSpaceVertexPos;
+#endif
+
+
 // note: MULTIINDEXTRISHAPE technique has different code here
 #if defined(PROJECTED_UV)
     float2 v_ProjectedUVCoords = input.TexCoords.zw * ProjectedUVParams.z;
@@ -218,7 +227,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // point lights
     for (int currentLight = 0; currentLight < v_TotalLightCount; currentLight++)
     {
-        float3 v_lightDirection = PointLightPosition[currentLight].xyz - input.ModelSpaceVertexPos.xyz;
+        float3 v_lightDirection = PointLightPosition[currentLight].xyz - v_CommonSpaceVertexPos.xyz;
         float v_lightRadius = PointLightPosition[currentLight].w;
         float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
         float3 v_lightDirectionN = normalize(v_lightDirection);
