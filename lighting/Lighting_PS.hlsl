@@ -1,7 +1,8 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: MODELSPACENORMALS, SPECULAR, CHARACTER_LIGHT
+// support flags: MODELSPACENORMALS, SPECULAR, CHARACTER_LIGHT, SKINNED
+
 #include "Common.h"
 #include "LightingCommon.h"
 
