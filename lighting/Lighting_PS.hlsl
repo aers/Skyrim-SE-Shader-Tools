@@ -61,11 +61,19 @@ SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
 Texture2D<float4> TexNormalSampler : register(t1);
-#if defined(MODELSPACENORMALS
+#if defined(MODELSPACENORMALS)
 SamplerState SpecularSampler : register(s2);
 Texture2D<float4> TexSpecularSampler : register(t2);
-#endif)
-#if defined(CHARACTER_LIGHT)
+#endif
+#if defined(PROJECTED_UV)
+SamplerState ProjectedDiffuseSampler : register(s3);
+Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
+SamplerState ProjectedNormalSampler : register(s8);
+Texture2D<float4> TexProjectedNormalSampler : register(t8);
+SamplerState ProjectedNormalDetailSampler : register(s10);
+Texture2D<float4> TexProjectedNormalDetailSampler : register(t10);
+#endif
+#if defined(PROJECTED_UV) || defined(CHARACTER_LIGHT)
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 #endif
@@ -148,6 +156,50 @@ PS_OUTPUT PSMain(PS_INPUT input)
         dot(input.TangentModelTransform1.xyz, v_Normal.xyz),
         dot(input.TangentModelTransform2.xyz, v_Normal.xyz)
         ));
+#endif
+
+// note: MULTIINDEXTRISHAPE technique has different code here
+#if defined(PROJECTED_UV)
+    float2 v_ProjectedUVCoords = input.TexCoords.zw * ProjectedUVParams.z;
+    float v_ProjUVNoise = TexProjectedNoiseSampler.Sample(ProjectedNoiseSampler, v_ProjectedUVCoords.xy).x;
+    float3 v_ProjDirN = normalize(input.ProjDir.xyz);
+    float v_NdotP = dot(v_CommonSpaceNormal.xyz, v_ProjDirN.xyz);
+    float v_ProjDiffuseIntensity = v_NdotP * input.VertexColor.w - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
+    // ProjectedUVParams3.w = EnableProjectedNormals
+    if (ProjectedUVParams3.w > 0.5)
+    {
+        // fProjectedUVDiffuseNormalTilingScale
+        float2 v_ProjectedUVDiffuseNormalCoords = v_ProjectedUVCoords * ProjectedUVParams3.x;
+        // fProjectedUVNormalDetailTilingScale
+        float2 v_ProjectedUVNormalDetailCoords = v_ProjectedUVCoords * ProjectedUVParams3.y;
+
+        float3 v_ProjectedNormal = TexProjectedNormalSampler.Sample(ProjectedNormalSampler, v_ProjectedUVDiffuseNormalCoords.xy).xyz;
+        v_ProjectedNormal = v_ProjectedNormal * 2 - 1;
+        float3 v_ProjectedNormalDetail = TexProjectedNormalDetailSampler.Sample(ProjectedNormalDetailSampler, v_ProjectedUVNormalDetailCoords.xy).xyz;
+
+        float3 v_ProjectedNormalCombined = v_ProjectedNormalDetail * 2 + float3(v_ProjectedNormal.x, v_ProjectedNormal.y, -1);
+        v_ProjectedNormalCombined.xy = v_ProjectedNormalCombined.xy + float2(-1, -1);
+        v_ProjectedNormalCombined.z = v_ProjectedNormalCombined.z * v_ProjectedNormal.z;
+
+        float3 v_ProjectedNormalCombinedN = normalize(v_ProjectedNormalCombined);
+
+        float3 v_ProjectedDiffuse = TexProjectedDiffuseSampler.Sample(ProjectedDiffuseSampler, v_ProjectedUVDiffuseNormalCoords.xy).xyz;
+
+        float v_AdjProjDiffuseIntensity = smoothstep(-0.100000, 0.100000, v_ProjDiffuseIntensity);
+
+        // note that this modifies the original normal, not the common space one that is used for lighting calculation
+        // it ends up only being used later on for the view space normal used for the normal map output which is used for later image space shaders
+        // unsure if this is a bug
+        v_Normal.xyz = lerp(v_Normal.xyz, v_ProjectedNormalCombinedN.xyz, v_AdjProjDiffuseIntensity);
+        v_Diffuse.xyz = lerp(v_Diffuse.xyz, v_ProjectedDiffuse.xyz * ProjectedUVParams2.xyz, v_AdjProjDiffuseIntensity);
+    }
+    else
+    {
+        if (v_ProjDiffuseIntensity < 0)
+        {
+            v_Diffuse.xyz = ProjectedUVParams2.xyz;
+        }
+    }
 #endif
 
     float3 v_DiffuseAccumulator = 0;
@@ -263,10 +315,17 @@ PS_OUTPUT PSMain(PS_INPUT input)
         output.MotionVector.xy = v_MotionVector.xy;
     }
 
+#if defined(MODELSPACENORMALS)
+    float3 v_ViewSpaceNormal = normalize(float3(
+        dot(input.ModelViewTransform0.xyz, v_Normal.xyz),
+        dot(input.ModelViewTransform1.xyz, v_Normal.xyz),
+        dot(input.ModelViewTransform2.xyz, v_Normal.xyz)));
+#else
     float3 v_ViewSpaceNormal = normalize(float3(
         dot(input.TangentViewTransform0.xyz, v_Normal.xyz),
         dot(input.TangentViewTransform1.xyz, v_Normal.xyz),
         dot(input.TangentViewTransform2.xyz, v_Normal.xyz)));
+#endif
 
     // specular map for SSR
     // SSRParams.x = fSpecMaskBegin
