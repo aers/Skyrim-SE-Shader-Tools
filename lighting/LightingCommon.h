@@ -31,6 +31,8 @@
 // 1<<10 Sss - #define SOFT_LIGHTING
 // 1<<11 Rim - #define RIM_LIGHTING
 // 1<<12 Bk - #define BACK_LIGHTING
+// 1<<13 Sh - #define SHADOW_DIR
+// 1<<14 DfSh - #define DEFSHADOW
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
 // 1<<18 Wmap - #define WORLD_MAP

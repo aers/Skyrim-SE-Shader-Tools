@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -11,7 +11,7 @@ cbuffer PerTechnique : register(b0)
 {
     float4 FogColor                              : packoffset(c0);      // @ 0 - 0x0000
     float4 ColourOutputClamp                     : packoffset(c1);      // @ 4 - 0x0010
-#if defined(DEFSHADOW)
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
     float4 VPOSOffset                            : packoffset(c2);      // @ 8 - 0x0020
 #endif
 }
@@ -71,7 +71,7 @@ Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
 SamplerState ProjectedNormalSampler : register(s8);
 Texture2D<float4> TexProjectedNormalSampler : register(t8);
 #endif
-#if defined(BACK_LIGHING)
+#if defined(BACK_LIGHTING)
 SamplerState BackLightMaskSampler : register(s9);
 Texture2D<float4> TexBackLightMaskSampler : register(t9);
 #endif
@@ -86,6 +86,10 @@ Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 #if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
 SamplerState SubSurfaceSampler : register(s12);
 Texture2D<float4> TexSubSurfaceSampler : register(t12);
+#endif
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+SamplerState ShadowMaskSampler : register(s14);
+Texture2D<float4> TexShadowMaskSampler : register(t14);
 #endif
 
 struct PS_OUTPUT
@@ -188,6 +192,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+    int v_ShadowLightCount = min(4, NumLightNumShadowLight.y);
+#endif
 
     float4 v_CommonSpaceNormal;
     
@@ -268,6 +275,29 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 #endif
 
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+    float4 v_ShadowMask;
+#if !defined(SHADOW_DIR)
+    if (v_ShadowLightCount > 0)
+    {
+#endif
+        float2 DRes_Inv = float2(DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.xy);
+        float2 DRes = float2(DynamicRes_WidthX_HeightY_PreviousWidthZ_PreviousHeightW.xy);
+        float DRes_WidthClamp = DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.z;
+
+        float2 v_ShadowMaskPos = (DRes_Inv.xy * input.ProjVertexPos.xy * VPOSOffset.xy + VPOSOffset.zw) * DRes.xy;
+        v_ShadowMaskPos = clamp(float2(0, 0), float2(DRes_WidthClamp, DRes.y), v_ShadowMaskPos);
+
+        v_ShadowMask = TexShadowMaskSampler.Sample(ShadowMaskSampler, v_ShadowMaskPos).xyzw;
+#if !defined(SHADOW_DIR)
+    }
+    else
+    {
+        v_ShadowMask = float4(1, 1, 1, 1);
+    }
+#endif
+#endif
+
     float3 v_DiffuseAccumulator = 0;
 
 #if defined(SPECULAR)
@@ -296,24 +326,42 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // point lights
     for (int currentLight = 0; currentLight < v_TotalLightCount; currentLight++)
     {
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+        float v_ShadowedFactor;
+
+        if (currentLight < v_ShadowLightCount)
+        {
+            int v_ShadowMaskOffset = (int) dot(ShadowLightMaskSelect.xyzw, M_IdentityMatrix[currentLight].xyzw);
+            v_ShadowedFactor = dot(v_ShadowMask.xyzw, M_IdentityMatrix[v_ShadowMaskOffset].xyzw);
+        }
+        else
+        {
+            v_ShadowedFactor = 1;
+        }
+
+        float3 v_lightColor = PointLightColor[currentLight].xyz * v_ShadowedFactor;
+#else
+        float3 v_lightColor = PointLightColor[currentLight].xyz;
+#endif
+        
         float3 v_lightDirection = PointLightPosition[currentLight].xyz - v_CommonSpaceVertexPos.xyz;
         float v_lightRadius = PointLightPosition[currentLight].w;
         float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
         float3 v_lightDirectionN = normalize(v_lightDirection);
-        float3 v_SingleLightDiffuseAccumulator = DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
+        float3 v_SingleLightDiffuseAccumulator = DirectionalLightDiffuse(v_lightDirectionN, v_lightColor, v_CommonSpaceNormal.xyz);
 #if defined(SOFT_LIGHTING)
         // NOTE: This is using the un-normalized light direction. Unsure if this is a bug or intentional.
-        v_SingleLightDiffuseAccumulator += SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+        v_SingleLightDiffuseAccumulator += SoftLighting(v_lightDirection, v_lightColor, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
 #endif
 #if defined(RIM_LIGHTING)
-        v_SingleLightDiffuseAccumulator += RimLighting(v_lightDirectionN, PointLightColor[currentLight].xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+        v_SingleLightDiffuseAccumulator += RimLighting(v_lightDirectionN, v_lightColor, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 #if defined(BACK_LIGHTING)
-        v_SingleLightDiffuseAccumulator += BackLighting(v_lightDirectionN, PointLightColor[currentLight].xyz, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
+        v_SingleLightDiffuseAccumulator += BackLighting(v_lightDirectionN, v_lightColor, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
 #endif
         v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)
-        v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, PointLightColor[currentLight].xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+        v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
     }
 
