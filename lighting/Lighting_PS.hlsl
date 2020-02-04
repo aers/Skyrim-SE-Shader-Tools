@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -77,7 +77,7 @@ Texture2D<float4> TexProjectedNormalDetailSampler : register(t10);
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 #endif
-#if defined(SOFT_LIGHTING)
+#if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
 SamplerState SubSurfaceSampler : register(s12);
 Texture2D<float4> TexSubSurfaceSampler : register(t12);
 #endif
@@ -119,6 +119,18 @@ float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softM
     return a_lightColor * a_softMask * v_soft;
 }
 
+float3 RimLighting(float3 a_lightDirectionN, float3 a_lightColor, float3 a_softMask, float a_rimPower, float3 a_viewDirectionN, float3 a_Normal)
+{
+    float NdotV = saturate(dot(a_Normal, a_viewDirectionN));
+    
+    float v_rim_1 = pow(1 - NdotV, a_rimPower);
+    float v_rim_2 = saturate(dot(a_viewDirectionN, -a_lightDirectionN));
+
+    float v_rim = v_rim_1 * v_rim_2;
+
+    return a_lightColor * a_softMask * v_rim;
+}
+
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
@@ -146,9 +158,16 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_SpecularPower = v_Normal.w;
 #endif
 
+#if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
+    float3 v_SubSurfaceTexMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, input.TexCoords.xy).xyz;
+#endif
+
 #if defined(SOFT_LIGHTING)
-    float3 v_SoftMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, input.TexCoords.xy).xyz;
     float v_SoftRolloff = LightingEffectParams.x; // fSubSurfaceLightRolloff
+#endif
+
+#if defined(RIM_LIGHTING)
+    float v_RimPower = LightingEffectParams.y; // fRimLightPower
 #endif
 
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
@@ -242,7 +261,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColor.xyz, v_CommonSpaceNormal.xyz);
 
 #if defined(SOFT_LIGHTING)
-    v_DiffuseAccumulator += SoftLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+    v_DiffuseAccumulator += SoftLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+#endif
+
+#if defined(RIM_LIGHTING)
+    v_DiffuseAccumulator += RimLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 
 #if defined(SPECULAR)
@@ -256,10 +279,13 @@ PS_OUTPUT PSMain(PS_INPUT input)
         float v_lightRadius = PointLightPosition[currentLight].w;
         float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
         float3 v_lightDirectionN = normalize(v_lightDirection);
-        float v_SingleLightDiffuseAccumulator += DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
+        float3 v_SingleLightDiffuseAccumulator = DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
 #if defined(SOFT_LIGHTING)
         // NOTE: This is using the un-normalized light direction. Unsure if this is a bug or intentional.
-        v_SingleLightDiffuseAccumulator += SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+        v_SingleLightDiffuseAccumulator += SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+#endif
+#if defined(RIM_LIGHTING)
+        v_SingleLightDiffuseAccumulator += RimLighting(v_lightDirectionN, PointLightColor[currentLight].xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
         v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)

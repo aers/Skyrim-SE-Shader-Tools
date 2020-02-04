@@ -29,13 +29,15 @@
 // 1<<2 Msn - #define MODELSPACENORMALS
 // 1<<9 Spc - #define SPECULAR
 // 1<<10 Sss - #define SOFT_LIGHTING
+// 1<<11 Rim - #define RIM_LIGHTING
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
 // 1<<18 Wmap - #define WORLD_MAP
 // 1<<22 (None) - #define CHARACTER_LIGHT
 
 // note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled
-#if defined(SPECULAR) || defined(ENVMAP) || defined(PARALLAX) || defined(PARALLAX_OCC) || defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(MULTILAYERPARALLAX) || defined(EYE)
+// in vertex shader RIM_LIGHTING and AMBIENT_SPECULAR force SPECULAR flag, creating the view direction vector, even though those flags aren't used to generate vertex shader combinations
+#if defined(SPECULAR) || defined(RIM_LIGHTING) || defined(AMBIENT_SPECULAR) || defined(ENVMAP) || defined(PARALLAX) || defined(PARALLAX_OCC) || defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(MULTILAYERPARALLAX) || defined(EYE)
 #define HAS_VIEW_DIRECTION_VECTOR_OUTPUT
 #endif
 
