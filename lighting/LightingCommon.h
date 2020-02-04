@@ -28,6 +28,7 @@
 // 1<<1 Sk - #define SKINNED
 // 1<<2 Msn - #define MODELSPACENORMALS
 // 1<<9 Spc - #define SPECULAR
+// 1<<10 Sss - #define SOFT_LIGHTING
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
 // 1<<18 Wmap - #define WORLD_MAP

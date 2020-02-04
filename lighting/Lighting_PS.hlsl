@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, PROJECTED_UV, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -77,6 +77,10 @@ Texture2D<float4> TexProjectedNormalDetailSampler : register(t10);
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 #endif
+#if defined(SOFT_LIGHTING)
+SamplerState SubSurfaceSampler : register(s12);
+Texture2D<float4> TexSubSurfaceSampler : register(t12);
+#endif
 
 struct PS_OUTPUT
 {
@@ -101,6 +105,18 @@ float3 DirectionalLightSpecular(float3 a_lightDirectionN, float3 a_lightColor, f
     float v_spec = pow(v_specIntensity, a_specularPower);
 
     return a_lightColor * v_spec;
+}
+
+float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softMask, float a_softRolloff, float3 a_Normal)
+{
+    float v_softIntensity = dot(a_Normal, a_lightDirection);
+
+    float v_soft_1 = smoothstep(-a_softRolloff, 1.0, v_softIntensity);
+    float v_soft_2 = smoothstep(0, 1.0, v_softIntensity);
+
+    float v_soft = saturate(v_soft_1 - v_soft_2);
+
+    return a_lightColor * a_softMask * v_soft;
 }
 
 PS_OUTPUT PSMain(PS_INPUT input)
@@ -128,6 +144,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_SpecularPower = TexSpecularSampler.Sample(SpecularSampler, input.TexCoords.xy).x;
 #else
     float v_SpecularPower = v_Normal.w;
+#endif
+
+#if defined(SOFT_LIGHTING)
+    float3 v_SoftMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, input.TexCoords.xy).xyz;
+    float v_SoftRolloff = LightingEffectParams.x; // fSubSurfaceLightRolloff
 #endif
 
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
@@ -220,6 +241,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // directional light
     v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColor.xyz, v_CommonSpaceNormal.xyz);
 
+#if defined(SOFT_LIGHTING)
+    v_DiffuseAccumulator += SoftLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+#endif
+
 #if defined(SPECULAR)
     v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
@@ -232,6 +257,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
         float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
         float3 v_lightDirectionN = normalize(v_lightDirection);
         v_DiffuseAccumulator += v_lightAttenuation * DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
+#if defined(SOFT_LIGHTING)
+        // NOTE: This is using the un-normalized light direction. Unsure if this is a bug or intentional.
+        v_DiffuseAccumulator += v_lightAttenuation * SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+#endif
 #if defined(SPECULAR)
         v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, PointLightColor[currentLight].xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
