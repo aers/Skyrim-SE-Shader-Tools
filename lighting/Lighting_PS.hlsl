@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, PROJECTED_UV, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -70,6 +70,12 @@ SamplerState ProjectedDiffuseSampler : register(s3);
 Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
 SamplerState ProjectedNormalSampler : register(s8);
 Texture2D<float4> TexProjectedNormalSampler : register(t8);
+#endif
+#if defined(BACK_LIGHING)
+SamplerState BackLightMaskSampler : register(s9);
+Texture2D<float4> TexBackLightMaskSampler : register(t9);
+#endif
+#if defined(PROJECTED_UV)
 SamplerState ProjectedNormalDetailSampler : register(s10);
 Texture2D<float4> TexProjectedNormalDetailSampler : register(t10);
 #endif
@@ -131,6 +137,13 @@ float3 RimLighting(float3 a_lightDirectionN, float3 a_lightColor, float3 a_softM
     return a_lightColor * a_softMask * v_rim;
 }
 
+float3 BackLighting(float3 a_lightDirectionN, float3 a_lightColor, float3 a_backMask, float3 a_Normal)
+{
+    float v_backIntensity = dot(a_Normal, -a_lightDirectionN);
+
+    return a_lightColor * a_backMask * v_backIntensity;
+}
+
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
@@ -160,6 +173,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
 #if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
     float3 v_SubSurfaceTexMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, input.TexCoords.xy).xyz;
+#endif
+
+#if defined(BACK_LIGHTING)
+    float3 v_BackLightingTexMask = TexBackLightMaskSampler.Sample(BackLightMaskSampler, input.TexCoords.xy).xyz;
 #endif
 
 #if defined(SOFT_LIGHTING)
@@ -268,6 +285,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += RimLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 
+#if defined(BACK_LIGHTING)
+    v_DiffuseAccumulator += BackLighting(DirLightDirection.xyz, DirLightColor.xyz, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
+#endif
+
 #if defined(SPECULAR)
     v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
@@ -286,6 +307,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #if defined(RIM_LIGHTING)
         v_SingleLightDiffuseAccumulator += RimLighting(v_lightDirectionN, PointLightColor[currentLight].xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
+#if defined(BACK_LIGHTING)
+        v_SingleLightDiffuseAccumulator += BackLighting(v_lightDirectionN, PointLightColor[currentLight].xyz, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
 #endif
         v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)
