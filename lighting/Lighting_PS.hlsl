@@ -256,11 +256,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
         float v_lightRadius = PointLightPosition[currentLight].w;
         float v_lightAttenuation = 1 - pow(saturate(length(v_lightDirection) / v_lightRadius), 2);
         float3 v_lightDirectionN = normalize(v_lightDirection);
-        v_DiffuseAccumulator += v_lightAttenuation * DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
+        float v_SingleLightDiffuseAccumulator += DirectionalLightDiffuse(v_lightDirectionN, PointLightColor[currentLight].xyz, v_CommonSpaceNormal.xyz);
 #if defined(SOFT_LIGHTING)
         // NOTE: This is using the un-normalized light direction. Unsure if this is a bug or intentional.
-        v_DiffuseAccumulator += v_lightAttenuation * SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+        v_SingleLightDiffuseAccumulator += SoftLighting(v_lightDirection, PointLightColor[currentLight].xyz, v_SoftMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
 #endif
+        v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)
         v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, PointLightColor[currentLight].xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
