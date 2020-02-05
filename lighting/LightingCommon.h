@@ -38,6 +38,7 @@
 // 1<<16 (None) - #define ANISO_LIGHTING
 // 1<<17 (Aspc) - #define AMBIENT_SPECULAR
 // 1<<18 Wmap - #define WORLD_MAP
+// 1<<20 Atest - #define DO_ALPHA_TEST
 // 1<<22 (None) - #define CHARACTER_LIGHT
 
 // note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled
@@ -58,6 +59,21 @@
 
 #if defined(MODELSPACENORMALS) && defined(ANISO_LIGHTING)
 #error ANISO_LIGHTING cannot be used with MODELSPACENORMALS as it requires vertex normals
+#endif
+
+#if defined(DEPTH_WRITE_DECALS) && !defined(DO_ALPHA_TEST)
+#error DEPTH_WRITE_DECALS is an extension of DO_ALPHA_TEST and requires that flag to be set
+#endif
+
+#if defined(DEPTH_WRITE_DECALS) && !defined(HAIR)
+#error DEPTH_WRITE_DECALS is for the HAIR technique only
+#endif
+
+#if defined(DO_ALPHA_TEST)
+cbuffer AlphaTestRef : register(b11)
+{
+    float4 AlphaTestRef : packoffset(c0);
+}
 #endif
 
 // Shared PerFrame buffer

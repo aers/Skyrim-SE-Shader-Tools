@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, ANISO_LIGHTING, AMBIENT_SPECULAR, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, DO_ALPHA_TEST, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -487,7 +487,24 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 
     // MaterialData.z = LightingProperty Alpha
-    output.Color.w = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
+    float v_OutAlpha = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
+
+#if defined(DEPTH_WRITE_DECALS)
+    if (v_OutAlpha - 0.0156863 < 0)
+    {
+        discard;
+    }
+    v_OutAlpha = saturate(1.05 * v_OutAlpha);
+#endif
+
+#if defined(DO_ALPHA_TEST)
+    if (v_OutAlpha - AlphaTestRef.x < 0)
+    {
+        discard;
+    }
+#endif
+
+    output.Color.w = v_OutAlpha;
     output.Color.xyz = v_OutDiffuse - (v_FogDiffuseDiff * FirstPerson * AlphaPass);
 
     if (SSRParams.z > 0.000010)
