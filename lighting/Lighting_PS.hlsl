@@ -87,6 +87,12 @@ Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 SamplerState SubSurfaceSampler : register(s12);
 Texture2D<float4> TexSubSurfaceSampler : register(t12);
 #endif
+#if defined(WORLD_MAP)
+SamplerState WorldMapOverlayNormalSampler : register(s12);
+Texture2D<float4> TexWorldMapOverlayNormalSampler : register(t12);
+SamplerState WorldMapOverlayNormalSnowSampler : register(s13);
+Texture2D<float4> TexWorldMapOverlayNormalSnowSampler : register(t13);
+#endif
 #if defined(DEFSHADOW) || defined(SHADOW_DIR)
 SamplerState ShadowMaskSampler : register(s14);
 Texture2D<float4> TexShadowMaskSampler : register(t14);
@@ -207,12 +213,17 @@ PS_OUTPUT PSMain(PS_INPUT input)
     int v_ShadowLightCount = min(4, NumLightNumShadowLight.y);
 #endif
 
-#if defined(ANISO_LIGHTING)
+#if defined(ANISO_LIGHTING) || defined(WORLD_MAP)
 #if defined(DRAW_IN_WORLDSPACE)
     float3 v_VertexNormal = float3(input.TangentWorldTransform0.z, input.TangentWorldTransform1.z, input.TangentWorldTransform2.z);
 #else
     float3 v_VertexNormal = float3(input.TangentModelTransform0.z, input.TangentModelTransform1.z, input.TangentModelTransform2.z);
 #endif
+#endif
+
+#if defined(WORLD_MAP)
+    float3 v_VertexNormalN = normalize(v_VertexNormal);
+    // need to implement LODLand/LODObj/LODObjHD to be sure of this, so not bothering yet
 #endif
 
     float4 v_CommonSpaceNormal;
