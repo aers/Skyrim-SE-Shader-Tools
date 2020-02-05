@@ -36,6 +36,7 @@
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
 // 1<<16 (None) - #define ANISO_LIGHTING
+// 1<<17 (Aspc) - #define AMBIENT_SPECULAR
 // 1<<18 Wmap - #define WORLD_MAP
 // 1<<22 (None) - #define CHARACTER_LIGHT
 

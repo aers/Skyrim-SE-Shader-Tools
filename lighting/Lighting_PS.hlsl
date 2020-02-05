@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, ANISO_LIGHTING, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, ANISO_LIGHTING, AMBIENT_SPECULAR, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -126,8 +126,6 @@ float3 AnisotropicSpecular(float3 a_lightDirectionN, float3 a_lightColor, float 
     float v_spec = 0.7 * pow(v_anisoIntensity, a_specularPower);
 
     return a_lightColor * v_spec * max(0, a_lightDirectionN.z);
-
-
 }
 
 float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softMask, float a_softRolloff, float3 a_Normal)
@@ -446,6 +444,19 @@ PS_OUTPUT PSMain(PS_INPUT input)
         / dot(PreviousViewProjMatrixUnjittered[3].xyzw, input.PreviousWorldVertexPos.xyzw);
     float2 v_MotionVector = (v_CurrProjPosition - v_PrevProjPosition) * float2(-0.5, 0.5);
 
+#if defined(AMBIENT_SPECULAR)
+    float v_AmbientSpecularIntensity = pow(1 - saturate(dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec)), AmbientSpecularTintAndFresnelPower.w);
+    float4 v_CommonSpaceNormal_AS = float4(v_CommonSpaceNormal.xyz, 0.15);
+    float3 v_AmbientSpecularColor = AmbientSpecularTintAndFresnelPower.xyz *
+        float3(
+            saturate(dot(DirectionalAmbient[0].xyzw, v_CommonSpaceNormal_AS.xyzw)),
+            saturate(dot(DirectionalAmbient[1].xyzw, v_CommonSpaceNormal_AS.xyzw)),
+            saturate(dot(DirectionalAmbient[2].xyzw, v_CommonSpaceNormal_AS.xyzw))
+            );
+
+    float3 v_AmbientSpecular = v_AmbientSpecularColor * v_AmbientSpecularIntensity;
+#endif
+
     // FirstPerson seems to be 1 regardless of 1st/3rd person in SE, could be LE legacy code or a bug
     // AlphaPass is 0 before the fog imagespace shader runs and 1 after
     float FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
@@ -461,8 +472,13 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // ColorOutputClamp.x = fLightingOutputColourClampPostLit
     v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.x);
 
+#if defined(SPECULAR) || defined(AMBIENT_SPECULAR)
 #if defined(SPECULAR)
     v_OutDiffuse += v_OutSpecular * SpecularColor.xyz;
+#endif
+#if defined(AMBIENT_SPECULAR)
+    v_OutDiffuse += v_AmbientSpecular;
+#endif
     v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
     v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
 
