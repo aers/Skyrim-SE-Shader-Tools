@@ -35,6 +35,7 @@
 // 1<<14 DfSh - #define DEFSHADOW
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
+// 1<<16 (None) - #define ANISO_LIGHTING
 // 1<<18 Wmap - #define WORLD_MAP
 // 1<<22 (None) - #define CHARACTER_LIGHT
 
@@ -52,6 +53,10 @@
 // since common space is model space by default, its not present if there are model space normals and the shader is not drawing in world space
 #if defined(DRAW_IN_WORLDSPACE) || !defined(MODELSPACENORMALS)
 #define HAS_COMMON_TRANSFORM
+#endif
+
+#if defined(MODELSPACENORMALS) && defined(ANISO_LIGHTING)
+#error ANISO_LIGHTING cannot be used with MODELSPACENORMALS as it requires vertex normals
 #endif
 
 // Shared PerFrame buffer

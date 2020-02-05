@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, ANISO_LIGHTING, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -117,6 +117,19 @@ float3 DirectionalLightSpecular(float3 a_lightDirectionN, float3 a_lightColor, f
     return a_lightColor * v_spec;
 }
 
+float3 AnisotropicSpecular(float3 a_lightDirectionN, float3 a_lightColor, float a_specularPower, float3 a_viewDirectionN, float3 a_Normal, float3 a_VertexNormal)
+{
+    float3 v_halfAngle = normalize(a_lightDirectionN + a_viewDirectionN);
+    float3 v_anisoDir = normalize(a_Normal * 0.5 + a_VertexNormal);
+
+    float v_anisoIntensity = 1 - min(1, abs(dot(v_anisoDir, a_lightDirectionN) - dot(v_anisoDir, v_halfAngle)));
+    float v_spec = 0.7 * pow(v_anisoIntensity, a_specularPower);
+
+    return a_lightColor * v_spec * max(0, a_lightDirectionN.z);
+
+
+}
+
 float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softMask, float a_softRolloff, float3 a_Normal)
 {
     float v_softIntensity = dot(a_Normal, a_lightDirection);
@@ -194,6 +207,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
 #if defined(DEFSHADOW) || defined(SHADOW_DIR)
     int v_ShadowLightCount = min(4, NumLightNumShadowLight.y);
+#endif
+
+#if defined(ANISO_LIGHTING)
+#if defined(DRAW_IN_WORLDSPACE)
+    float3 v_VertexNormal = float3(input.TangentWorldTransform0.z, input.TangentWorldTransform1.z, input.TangentWorldTransform2.z);
+#else
+    float3 v_VertexNormal = float3(input.TangentModelTransform0.z, input.TangentModelTransform1.z, input.TangentModelTransform2.z);
+#endif
 #endif
 
     float4 v_CommonSpaceNormal;
@@ -286,6 +307,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
         float DRes_WidthClamp = DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.z;
 
         float2 v_ShadowMaskPos = (DRes_Inv.xy * input.ProjVertexPos.xy * VPOSOffset.xy + VPOSOffset.zw) * DRes.xy;
+        // Uses the Height instead of HeightClamp for clamping; HeightClamp is unusued anywhere else in the shader
+        // Presumably this is intentional but who knows 
         v_ShadowMaskPos = clamp(float2(0, 0), float2(DRes_WidthClamp, DRes.y), v_ShadowMaskPos);
 
         v_ShadowMask = TexShadowMaskSampler.Sample(ShadowMaskSampler, v_ShadowMaskPos).xyzw;
@@ -320,7 +343,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 
 #if defined(SPECULAR)
+#if defined(ANISO_LIGHTING)
+    v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#else
     v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
 #endif
 
     // point lights
@@ -361,7 +388,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
         v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)
+#if defined(ANISO_LIGHTING)
+        v_SpecularAccumulator += v_lightAttenuation * AnisotropicSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#else
         v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
 #endif
     }
 
