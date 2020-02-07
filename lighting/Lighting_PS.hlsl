@@ -6,6 +6,10 @@
 #include "Common.h"
 #include "LightingCommon.h"
 
+#if defined(ADDITIONAL_ALPHA_MASK)
+const static float AAM[] = { 0.003922, 0.533333, 0.133333, 0.666667, 0.800000, 0.266667, 0.933333, 0.400000, 0.200000, 0.733333, 0.066667, 0.600000, 0.996078, 0.466667, 0.866667, 0.333333 };
+#endif
+
 // Dynamic buffer: sizeof() = 32 (0x20)
 cbuffer PerTechnique : register(b0)
 {
@@ -579,8 +583,25 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.z);
 #endif
 
+#if defined(ADDITIONAL_ALPHA_MASK)
+    uint2 v_ProjVertexPosTrunc = (uint2) input.ProjVertexPos.xy;
+
+    // 0xC - 0b1100
+    // 0x3 - 0b0011
+    uint v_AAM_Index = (v_ProjVertexPosTrunc.x << 2) & 0xC | (v_ProjVertexPosTrunc.y) & 0x3;
+
+    float v_AAM = MaterialData.z - AAM[v_AAM_Index];
+    
+    if (v_AAM < 0)
+    {
+        discard;
+    }
+
+    float v_OutAlpha = input.VertexColor.w * v_Diffuse.w;
+#else
     // MaterialData.z = LightingProperty Alpha
     float v_OutAlpha = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
+#endif
 
 #if defined(DEPTH_WRITE_DECALS)
     if (v_OutAlpha - 0.0156863 < 0)
