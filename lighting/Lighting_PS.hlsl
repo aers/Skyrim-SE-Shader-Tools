@@ -373,7 +373,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
 #if defined(SHADOW_DIR)
     float v_DirLightShadowedFactor = v_ShadowMask.x;
-    float3 v_DirLightColor = DirLightCor.xyz * v_DirLightShadowedFactor;
+    float3 v_DirLightColor = DirLightColor.xyz * v_DirLightShadowedFactor;
 #else
     float3 v_DirLightColor = DirLightColor.xyz;
 #endif
