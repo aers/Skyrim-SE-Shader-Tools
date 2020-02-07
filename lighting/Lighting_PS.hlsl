@@ -371,19 +371,25 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_SpecularAccumulator = 0;
 #endif
 
+#if defined(SHADOW_DIR)
+    float v_DirLightShadowedFactor = v_ShadowMask.x;
+    float3 v_DirLightColor = DirLightCor.xyz * v_DirLightShadowedFactor;
+#else
+    float3 v_DirLightColor = DirLightColor.xyz;
+#endif
     // directional light
-    v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColor.xyz, v_CommonSpaceNormal.xyz);
+    v_DiffuseAccumulator = DirectionalLightDiffuse(DirLightDirection.xyz, v_DirLightColor, v_CommonSpaceNormal.xyz);
 
 #if defined(SOFT_LIGHTING)
-    v_DiffuseAccumulator += SoftLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
+    v_DiffuseAccumulator += SoftLighting(DirLightDirection.xyz, v_DirLightColor, v_SubSurfaceTexMask, v_SoftRolloff, v_CommonSpaceNormal.xyz);
 #endif
 
 #if defined(RIM_LIGHTING)
-    v_DiffuseAccumulator += RimLighting(DirLightDirection.xyz, DirLightColor.xyz, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+    v_DiffuseAccumulator += RimLighting(DirLightDirection.xyz, v_DirLightColor, v_SubSurfaceTexMask, v_RimPower, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 
 #if defined(BACK_LIGHTING)
-    v_DiffuseAccumulator += BackLighting(DirLightDirection.xyz, DirLightColor.xyz, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
+    v_DiffuseAccumulator += BackLighting(DirLightDirection.xyz, v_DirLightColor, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
 #endif
 
     // TODO - refactor defines
@@ -423,9 +429,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
     {
 #endif
 #if defined(ANISO_LIGHTING)
-        v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+        v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
 #else
-        v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+        v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 #if defined(PROJECTED_UV) && defined(SNOW)
     }
