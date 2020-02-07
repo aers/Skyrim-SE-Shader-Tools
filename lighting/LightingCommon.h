@@ -36,9 +36,11 @@
 // 1<<15 Projuv - #define PROJECTED_UV
 // 1<<15 DwDecals - #define DEPTH_WRITE_DECALS (HAIR technique only)
 // 1<<16 (None) - #define ANISO_LIGHTING
-// 1<<17 (Aspc) - #define AMBIENT_SPECULAR
+// 1<<17 Aspc - #define AMBIENT_SPECULAR
 // 1<<18 Wmap - #define WORLD_MAP
+// 1<<19 BaseSnow - #define BASE_OBJECT_IS_SNOW
 // 1<<20 Atest - #define DO_ALPHA_TEST
+// 1<<21 Snow - #define SNOW
 // 1<<22 (None) - #define CHARACTER_LIGHT
 
 // note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled

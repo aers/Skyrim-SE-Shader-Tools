@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
 // support NONE Technique only
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, DO_ALPHA_TEST, CHARACTER_LIGHT
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -165,6 +165,11 @@ float3 BackLighting(float3 a_lightDirectionN, float3 a_lightColor, float3 a_back
     return a_lightColor * a_backMask * v_backIntensity;
 }
 
+float3 toGrayscale(float3 a_Color)
+{
+    return dot(float3(0.3, 0.59, 0.11), a_Color);
+}
+
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
@@ -179,7 +184,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, input.TexCoords.xy).xyzw;
 
 #if defined(MODELSPACENORMALS)
-    float3 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
+    float3 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xzy;
 #else
     float4 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
 #endif
@@ -213,16 +218,17 @@ PS_OUTPUT PSMain(PS_INPUT input)
     int v_ShadowLightCount = min(4, NumLightNumShadowLight.y);
 #endif
 
-#if defined(ANISO_LIGHTING) || defined(WORLD_MAP)
+#if (defined(ANISO_LIGHTING) || defined(WORLD_MAP) || defined(SNOW)) && !defined(MODELSPACENORMALS)
 #if defined(DRAW_IN_WORLDSPACE)
     float3 v_VertexNormal = float3(input.TangentWorldTransform0.z, input.TangentWorldTransform1.z, input.TangentWorldTransform2.z);
+    float3 v_VertexNormalN = normalize(v_VertexNormal);
 #else
     float3 v_VertexNormal = float3(input.TangentModelTransform0.z, input.TangentModelTransform1.z, input.TangentModelTransform2.z);
+    float3 v_VertexNormalN = normalize(v_VertexNormal);
 #endif
 #endif
 
-#if defined(WORLD_MAP)
-    float3 v_VertexNormalN = normalize(v_VertexNormal);
+#if defined(WORLD_MAP) 
     // need to implement LODLand/LODObj/LODObjHD to be sure of this, so not bothering yet
 #endif
 
@@ -268,6 +274,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_ProjDirN = normalize(input.ProjDir.xyz);
     float v_NdotP = dot(v_CommonSpaceNormal.xyz, v_ProjDirN.xyz);
     float v_ProjDiffuseIntensity = v_NdotP * input.VertexColor.w - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
+#if defined(SNOW)
+    float v_ProjUVDoSnowRim = 0;
+#endif
     // ProjectedUVParams3.w = EnableProjectedNormals
     if (ProjectedUVParams3.w > 0.5)
     {
@@ -295,13 +304,33 @@ PS_OUTPUT PSMain(PS_INPUT input)
         // unsure if this is a bug
         v_Normal.xyz = lerp(v_Normal.xyz, v_ProjectedNormalCombinedN.xyz, v_AdjProjDiffuseIntensity);
         v_Diffuse.xyz = lerp(v_Diffuse.xyz, v_ProjectedDiffuse.xyz * ProjectedUVParams2.xyz, v_AdjProjDiffuseIntensity);
+#if defined(SNOW)
+        v_ProjUVDoSnowRim = -1;
+#if defined(BASE_OBJECT_IS_SNOW)
+        output.SnowMask.y = min(1, v_AdjProjDiffuseIntensity + v_Diffuse.w);
+#else
+        output.SnowMask.y = v_AdjProjDiffuseIntensity;
+#endif
     }
     else
     {
-        if (v_ProjDiffuseIntensity < 0)
+        if (v_ProjDiffuseIntensity > 0)
         {
             v_Diffuse.xyz = ProjectedUVParams2.xyz;
+#if defined(SNOW)
+            v_ProjUVDoSnowRim = -1;
+#if defined(BASE_OBJECT_IS_SNOW)
+            output.SnowMask.y = min(1, v_ProjDiffuseIntensity + v_Diffuse.w);
+#else
+            output.SnowMask.y = v_ProjDiffuseIntensity;
+#endif
         }
+#if defined(SNOW)
+        else
+        {
+            output.SnowMask.y = 0;
+        }
+#endif
     }
 #endif
 
@@ -351,11 +380,51 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += BackLighting(DirLightDirection.xyz, DirLightColor.xyz, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
 #endif
 
-#if defined(SPECULAR)
-#if defined(ANISO_LIGHTING)
-    v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+    // TODO - refactor defines
+#if defined(SNOW)
+#if defined(PROJECTED_UV)
+    if (v_ProjUVDoSnowRim != 0)
+    {
+#endif
+        // snow rim lighting
+        float v_SnowRimLight = 0.0;
+        // bEnableSnowRimLighting
+        if (SnowRimLightParameters.w > 0.0)
+        {
+            float v_SnowRimLightIntensity = SnowRimLightParameters.x;
+            float v_SnowGeometrySpecPower = SnowRimLightParameters.y;
+            float v_SnowNormalSpecPower = SnowRimLightParameters.z;
+
+            float v_SnowRim_Normal = pow(1 - saturate(dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz)), v_SnowNormalSpecPower);
+#if defined(MODELSPACENORMALS)
+            float v_SnowRim_Geometry = pow(1 - saturate(v_ViewDirectionVec.z), v_SnowGeometrySpecPower);
 #else
-    v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+            float v_SnowRim_Geometry = pow(1 - saturate(dot(v_VertexNormalN.xyz, v_ViewDirectionVec.xyz)), v_SnowGeometrySpecPower);
+#endif
+
+            v_SnowRimLight = v_SnowRim_Normal * v_SnowRim_Geometry * v_SnowRimLightIntensity;
+
+#if defined(SPECULAR)
+            v_SpecularAccumulator.xyz = v_SnowRimLight.xxx;
+#endif
+        }
+#if defined(PROJECTED_UV)
+    }
+#endif
+#endif
+
+#if defined(SPECULAR) && (!defined(SNOW) || defined(PROJECTED_UV))
+#if defined(PROJECTED_UV)
+    else
+    {
+#endif
+#if defined(ANISO_LIGHTING)
+        v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#else
+        v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+#endif
+#if defined(PROJECTED_UV)
+    }
 #endif
 #endif
 
@@ -440,8 +509,21 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * input.VertexColor.xyz;
-#if defined(SPECULAR)
+
+#if defined(SPECULAR) 
+    float3 v_OutSpecular;
+#if defined(PROJECTED_UV) && defined(SNOW)
+    if (v_ProjUVDoSnowRim != 0)
+    {
+        float3 v_OutSpecular = float3(0, 0, 0);
+    }
+    else
+    {
+        float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+    }
+#elif !defined(SNOW)
     float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+#endif
 #endif
 
     // motion vector
@@ -484,7 +566,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.x);
 
 #if defined(SPECULAR) || defined(AMBIENT_SPECULAR)
-#if defined(SPECULAR)
+#if defined(SPECULAR) && (!defined(SNOW) || defined(PROJECTED_UV))
     v_OutDiffuse += v_OutSpecular * SpecularColor.xyz;
 #endif
 #if defined(AMBIENT_SPECULAR)
@@ -557,6 +639,17 @@ PS_OUTPUT PSMain(PS_INPUT input)
     output.Normal.xy = float2(0.5, 0.5) + (v_ViewSpaceNormal.xy / v_ViewSpaceNormal.z);
     output.MotionVector.zw = float2(0, 1);
     output.Normal.z = 0;
+
+#if defined(SNOW)
+#if defined(SPECULAR)
+    output.SnowMask.x = toGrayscale(v_SpecularAccumulator);
+#else
+    output.SnowMask.x = toGrayscale(v_SnowRimLight);
+#endif
+#if !defined(PROJECTED_UV)
+    output.SnowMask.y = v_Diffuse.w;
+#endif
+#endif
 
     return output;
 }
