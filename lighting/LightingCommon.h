@@ -42,6 +42,7 @@
 // 1<<20 Atest - #define DO_ALPHA_TEST
 // 1<<21 Snow - #define SNOW
 // 1<<22 (None) - #define CHARACTER_LIGHT
+// 1<<23 (Aam) - #define ADDITIONAL_ALPHA_MASK
 
 // note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled
 // in vertex shader RIM_LIGHTING and AMBIENT_SPECULAR force SPECULAR flag, creating the view direction vector, even though those flags aren't used to generate vertex shader combinations
@@ -63,18 +64,18 @@
 #error ANISO_LIGHTING cannot be used with MODELSPACENORMALS as it requires vertex normals
 #endif
 
-#if defined(DEPTH_WRITE_DECALS) && !defined(DO_ALPHA_TEST)
-#error DEPTH_WRITE_DECALS is an extension of DO_ALPHA_TEST and requires that flag to be set
-#endif
+//#if defined(DEPTH_WRITE_DECALS) && !defined(DO_ALPHA_TEST)
+//#error DEPTH_WRITE_DECALS is an extension of DO_ALPHA_TEST and requires that flag to be set
+//#endif
 
 #if defined(DEPTH_WRITE_DECALS) && !defined(HAIR)
 #error DEPTH_WRITE_DECALS is for the HAIR technique only
 #endif
 
 #if defined(DO_ALPHA_TEST)
-cbuffer AlphaTestRef : register(b11)
+cbuffer AlphaTestRefCB : register(b11)
 {
-    float4 AlphaTestRef : packoffset(c0);
+    float4 AlphaTestRefCB : packoffset(c0);
 }
 #endif
 

@@ -315,6 +315,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #else
         output.SnowMask.y = v_AdjProjDiffuseIntensity;
 #endif
+#endif
     }
     else
     {
@@ -327,6 +328,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
             output.SnowMask.y = min(1, v_ProjDiffuseIntensity + v_Diffuse.w);
 #else
             output.SnowMask.y = v_ProjDiffuseIntensity;
+#endif
 #endif
         }
 #if defined(SNOW)
@@ -386,12 +388,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     // TODO - refactor defines
 #if defined(SNOW)
+    // snow rim lighting
+    float v_SnowRimLight = 0.0;
 #if defined(PROJECTED_UV)
     if (v_ProjUVDoSnowRim != 0)
     {
 #endif
-        // snow rim lighting
-        float v_SnowRimLight = 0.0;
         // bEnableSnowRimLighting
         if (SnowRimLightParameters.w > 0.0)
         {
@@ -405,7 +407,6 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #else
             float v_SnowRim_Geometry = pow(1 - saturate(dot(v_VertexNormalN.xyz, v_ViewDirectionVec.xyz)), v_SnowGeometrySpecPower);
 #endif
-
             v_SnowRimLight = v_SnowRim_Normal * v_SnowRim_Geometry * v_SnowRimLightIntensity;
 
 #if defined(SPECULAR)
@@ -416,9 +417,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 #endif
 #endif
-
 #if defined(SPECULAR) && (!defined(SNOW) || defined(PROJECTED_UV))
-#if defined(PROJECTED_UV)
+#if defined(PROJECTED_UV) && defined(SNOW)
     else
     {
 #endif
@@ -427,7 +427,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #else
         v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, DirLightColor.xyz, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
-#if defined(PROJECTED_UV)
+#if defined(PROJECTED_UV) && defined(SNOW)
     }
 #endif
 #endif
@@ -519,14 +519,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(PROJECTED_UV) && defined(SNOW)
     if (v_ProjUVDoSnowRim != 0)
     {
-        float3 v_OutSpecular = float3(0, 0, 0);
+        v_OutSpecular = float3(0, 0, 0);
     }
     else
     {
-        float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+        v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
     }
 #elif !defined(SNOW)
-    float3 v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+    v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
 #endif
 #endif
 
@@ -612,7 +612,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 
 #if defined(DO_ALPHA_TEST)
-    if (v_OutAlpha - AlphaTestRef.x < 0)
+    if (v_OutAlpha - AlphaTestRefCB.x < 0)
     {
         discard;
     }
