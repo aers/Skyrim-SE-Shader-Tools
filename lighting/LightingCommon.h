@@ -5,9 +5,9 @@
 // 1 Envmap - #define ENVMAP
 // 2 Glowmap - #define GLOWMAP
 // 3 Parallax - #define PARALLAX
-// 4 Facegen - #define FACEGEN
-// 5 FacegenRGBTint - #define FACEGEN_RGB_TINT
-// 6 Hair - #define HAIR
+// 4 Facegen - #define FACEGEN  (Face Tint)
+// 5 FacegenRGBTint - #define FACEGEN_RGB_TINT (Skin Tint)
+// 6 Hair - #define HAIR (Hair Tint)
 // 7 ParallaxOcc - #define PARALLAX_OCC
 // 8 MTLand - #define MULTI_TEXTURE, #define LANDSCAPE
 // 9 LODLand - #define LODLANDSCAPE
@@ -78,6 +78,10 @@
 
 #if defined(MODELSPACENORMALS) && defined(PARALLAX)
 #error PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
+#endif
+
+#if defined(PROJECTED_UV) && defined(FACEGEN)
+#error FACEGEN technique incompatible with PROJECTED_UV flag due to re-use of texture slot
 #endif
 
 #if defined(DO_ALPHA_TEST)

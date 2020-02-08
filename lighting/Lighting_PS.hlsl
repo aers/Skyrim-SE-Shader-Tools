@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -74,9 +74,18 @@ Texture2D<float4> TexSpecularSampler : register(t2);
 SamplerState HeightSampler : register(s3);
 Texture2D<float4> TexHeightSampler : register(t3);
 #endif
+// NOTE: Facegen + ProjUV incompatible due to this
+#if defined(FACEGEN)
+SamplerState TintSampler : register(s3);
+Texture2D<float4> TexTintSampler : register(t3);
+#endif
 #if defined(PROJECTED_UV)
 SamplerState ProjectedDiffuseSampler : register(s3);
 Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
+#endif
+#if defined(FACEGEN)
+SamplerState DetailSampler : register(s4);
+Texture2D<float4> TexDetailSampler : register(t4);
 #endif
 #if defined(ENVMAP)
 SamplerState EnvSampler : register(s4);
@@ -104,7 +113,7 @@ Texture2D<float4> TexProjectedNormalDetailSampler : register(t10);
 SamplerState ProjectedNoiseSampler : register(s11);
 Texture2D<float4> TexProjectedNoiseSampler : register(t11);
 #endif
-#if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
+#if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING) || defined(FACEGEN)
 SamplerState SubSurfaceSampler : register(s12);
 Texture2D<float4> TexSubSurfaceSampler : register(t12);
 #endif
@@ -253,6 +262,18 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
 #if defined(RIM_LIGHTING)
     float v_RimPower = LightingEffectParams.y; // fRimLightPower
+#endif
+
+#if defined(FACEGEN)
+    float3 v_DetailColor = TexDetailSampler.Sample(DetailSampler, v_TexCoords.xy).xyz;
+    // the compiler optimizes this in a way different from the vanilla shader so we may have slightly difference precision but no one will notice
+    v_DetailColor = (v_DetailColor + (1 / 255)) * (255 / 64);
+
+    float3 v_TintColor = TexTintSampler.Sample(TintSampler, v_TexCoords.xy).xyz;
+    // probably some known blend function?
+    v_TintDiffuseOverlay = v_Diffuse.xyz * v_Diffuse.xyz + 2 * (v_TintColor * v_Diffuse.xyz) - 2 * (v_TintColor * v_Diffuse.xyz) * v_Diffuse.xyz;
+
+    v_Diffuse.xyz = v_TintDiffuseOverlay * v_DetailColor;
 #endif
 
     int v_TotalLightCount = min(7, NumLightNumShadowLight.x);
@@ -583,6 +604,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
 #if defined(SPECULAR) 
     float3 v_OutSpecular;
+    float v_SpecularLODFade = MaterialData.y;
 #if defined(PROJECTED_UV) && defined(SNOW)
     if (v_ProjUVDoSnowRim != 0)
     {
@@ -590,10 +612,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
     else
     {
-        v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+        v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * v_SpecularLODFade;
     }
 #elif !defined(SNOW)
-    v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * MaterialData.y;
+    v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * v_SpecularLODFade;
 #endif
 #endif
 
