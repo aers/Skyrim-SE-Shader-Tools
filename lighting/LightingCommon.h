@@ -72,6 +72,14 @@
 #error DEPTH_WRITE_DECALS is for the HAIR technique only
 #endif
 
+#if defined(PROJECTED_UV) && defined(PARALLAX)
+#error PARALLAX technique incompatible with PROJECTED_UV flag due to re-use of texture slot
+#endif
+
+#if defined(MODELSPACENORMALS) && defined(PARALLAX)
+#error PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
+#endif
+
 #if defined(DO_ALPHA_TEST)
 cbuffer AlphaTestRefCB : register(b11)
 {

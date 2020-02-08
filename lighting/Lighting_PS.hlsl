@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -68,6 +68,11 @@ Texture2D<float4> TexNormalSampler : register(t1);
 #if defined(MODELSPACENORMALS)
 SamplerState SpecularSampler : register(s2);
 Texture2D<float4> TexSpecularSampler : register(t2);
+#endif
+// NOTE: Parallax + ProjUV incompatible due to this
+#if defined(PARALLAX)
+SamplerState HeightSampler : register(s3);
+Texture2D<float4> TexHeightSampler : register(t3);
 #endif
 #if defined(PROJECTED_UV)
 SamplerState ProjectedDiffuseSampler : register(s3);
@@ -197,28 +202,49 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_ViewDirectionVec = normalize(float3(1, 1, 1));
 #endif
 
-    float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, input.TexCoords.xy).xyzw;
+#if defined(PARALLAX)
+#if defined(DRAW_IN_WORLDSPACE)
+    float3x3 v_CommonTangentMatrix = transpose(float3x3(input.TangentWorldTransform0.xyz, input.TangentWorldTransform1.xyz, input.TangentWorldTransform2.xyz));
+#else
+    float3x3 v_CommonTangentMatrix = transpose(float3x3(input.TangentModelTransform0.xyz, input.TangentModelTransform1.xyz, input.TangentModelTransform2.xyz));
+#endif
+    float3 v_TangentViewDirection = normalize(float3(
+        dot(v_CommonTangentMatrix[0].xyz, input.ViewDirectionVec.xyz),
+        dot(v_CommonTangentMatrix[1].xyz, input.ViewDirectionVec.xyz),
+        dot(v_CommonTangentMatrix[2].xyz, input.ViewDirectionVec.xyz));
+
+    float height = TexHeightSampler.Sample(HeightSampler, v_TexCoords.xy).x * 0.0800 - 0.0400;
+#if defined(FIX_VANILLA_BUGS)
+    float2 v_TexCoords = v_TangentViewDirection.xy * height + v_TexCoords.xy;
+#else
+    float2 v_TexCoords = v_ViewDirectionVec.xy * height + v_TexCoords.xy;
+#endif
+#else
+    float2 v_TexCoords = v_TexCoords.xy;
+#endif
+
+    float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
 
 #if defined(MODELSPACENORMALS)
-    float3 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xzy;
+    float3 v_Normal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xzy;
 #else
-    float4 v_Normal = TexNormalSampler.Sample(NormalSampler, input.TexCoords.xy).xyzw;
+    float4 v_Normal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xyzw;
 #endif
 
     v_Normal.xyz = v_Normal.xyz * 2 - 1;
 
 #if defined(MODELSPACENORMALS)
-    float v_SpecularPower = TexSpecularSampler.Sample(SpecularSampler, input.TexCoords.xy).x;
+    float v_SpecularPower = TexSpecularSampler.Sample(SpecularSampler, v_TexCoords.xy).x;
 #else
     float v_SpecularPower = v_Normal.w;
 #endif
 
 #if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
-    float3 v_SubSurfaceTexMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, input.TexCoords.xy).xyz;
+    float3 v_SubSurfaceTexMask = TexSubSurfaceSampler.Sample(SubSurfaceSampler, v_TexCoords.xy).xyz;
 #endif
 
 #if defined(BACK_LIGHTING)
-    float3 v_BackLightingTexMask = TexBackLightMaskSampler.Sample(BackLightMaskSampler, input.TexCoords.xy).xyz;
+    float3 v_BackLightingTexMask = TexBackLightMaskSampler.Sample(BackLightMaskSampler, v_TexCoords.xy).xyz;
 #endif
 
 #if defined(SOFT_LIGHTING)
@@ -497,7 +523,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 
 #if defined(ENVMAP)
-    float v_EnvMapMask = TexEnvMaskSampler.Sample(EnvMaskSampler, input.TexCoords.xy).x;
+    float v_EnvMapMask = TexEnvMaskSampler.Sample(EnvMaskSampler, v_TexCoords.xy).x;
 
     float v_EnvMapScale = EnvmapData.x;
     float v_EnvMapLODFade = MaterialData.x;
@@ -540,7 +566,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += DirectionalAmbientNormal.xyz;
 
 #if defined(GLOWMAP)
-    float3 v_GlowColor = TexGlowSampler.Sample(GlowSampler, input.TexCoords.xy).xyz;
+    float3 v_GlowColor = TexGlowSampler.Sample(GlowSampler, v_TexCoords.xy).xyz;
     v_DiffuseAccumulator += EmitColor.xyz * v_GlowColor.xyz;
 #else
     v_DiffuseAccumulator += EmitColor.xyz;
