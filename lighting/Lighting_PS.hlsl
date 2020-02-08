@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -164,6 +164,23 @@ float3 AnisotropicSpecular(float3 a_lightDirectionN, float3 a_lightColor, float 
     return a_lightColor * v_spec * max(0, a_lightDirectionN.z);
 }
 
+float3 HairAnisotropicSpecular(float3 a_lightDirectionN, float3 a_lightColor, float a_specularPower, float3 a_viewDirectionN, float3 a_Normal, float3 a_VertexNormal, float3 a_VertexBitangent, float3 a_HairTintVertexColor)
+{
+    float3 v_halfAngle = normalize(a_lightDirectionN + a_viewDirectionN);
+    float3 v_anisoDir = normalize(a_Normal * 0.5 + a_VertexNormal);
+
+    float v_anisoIntensity_1 = 1 - min(1, abs(dot(v_anisoDir, a_lightDirectionN) - dot(v_anisoDir, v_halfAngle)));
+    float v_spec_1 = 0.7 * pow(v_anisoIntensity_1, a_specularPower);
+
+    float3 v_bitAnisoDir = normalize(v_anisoDir - a_VertexBitangent * 0.05);
+
+    float v_anisoIntensity_2 = 1 - min(1, abs(dot(v_bitAnisoDir, a_lightDirectionN) - dot(v_bitAnisoDir, v_halfAngle)));
+    float v_spec_2 = pow(v_anisoIntensity_2, a_specularPower);
+
+    return a_lightColor * (v_spec_2 * a_HairTintVertexColor + v_spec_1) * max(0, a_lightDirectionN.z);
+
+}
+
 float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softMask, float a_softRolloff, float3 a_Normal)
 {
     float v_softIntensity = dot(a_Normal, a_lightDirection);
@@ -222,14 +239,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
         dot(v_CommonTangentMatrix[1].xyz, input.ViewDirectionVec.xyz),
         dot(v_CommonTangentMatrix[2].xyz, input.ViewDirectionVec.xyz));
 
-    float height = TexHeightSampler.Sample(HeightSampler, v_TexCoords.xy).x * 0.0800 - 0.0400;
+    float height = TexHeightSampler.Sample(HeightSampler, input.TexCoords.xy).x * 0.0800 - 0.0400;
 #if defined(FIX_VANILLA_BUGS)
-    float2 v_TexCoords = v_TangentViewDirection.xy * height + v_TexCoords.xy;
+    float2 v_TexCoords = v_TangentViewDirection.xy * height + input.TexCoords.xy;
 #else
-    float2 v_TexCoords = v_ViewDirectionVec.xy * height + v_TexCoords.xy;
+    float2 v_TexCoords = v_ViewDirectionVec.xy * height + input.TexCoords.xy;
 #endif
 #else
-    float2 v_TexCoords = v_TexCoords.xy;
+    float2 v_TexCoords = input.TexCoords.xy;
 #endif
 
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
@@ -291,12 +308,19 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(DRAW_IN_WORLDSPACE)
     float3 v_VertexNormal = float3(input.TangentWorldTransform0.z, input.TangentWorldTransform1.z, input.TangentWorldTransform2.z);
     float3 v_VertexNormalN = normalize(v_VertexNormal);
+
+#if defined(HAIR)
+    float3 v_VertexBitangent = float3(input.TangentWorldTransform0.x, input.TangentWorldTransform1.x, input.TangentWorldTransform2.x);
+#endif
 #else
     float3 v_VertexNormal = float3(input.TangentModelTransform0.z, input.TangentModelTransform1.z, input.TangentModelTransform2.z);
     float3 v_VertexNormalN = normalize(v_VertexNormal);
-#endif
-#endif
 
+#if defined(HAIR)
+    float3 v_VertexBitangent = float3(input.TangentModelTransform0.x, input.TangentModelTransform1.x, input.TangentModelTransform2.x);
+#endif
+#endif
+#endif
 #if defined(WORLD_MAP) 
     // need to implement LODLand/LODObj/LODObjHD to be sure of this, so not bothering yet
 #endif
@@ -457,6 +481,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += BackLighting(DirLightDirection.xyz, v_DirLightColor, v_BackLightingTexMask, v_CommonSpaceNormal.xyz);
 #endif
 
+#if defined(HAIR)    
+    float3 v_VertexColor = lerp(float3(1, 1, 1), TintColor.xyz, input.VertexColor.y);
+#else
+    float3 v_VertexColor = input.VertexColor.xyz;
+#endif
+
     // TODO - refactor defines
 #if defined(SNOW)
     // snow rim lighting
@@ -494,7 +524,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
     {
 #endif
 #if defined(ANISO_LIGHTING)
+#if defined(HAIR)
+        v_SpecularAccumulator = HairAnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
+#else
         v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#endif
 #else
         v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
@@ -542,7 +576,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
         v_DiffuseAccumulator += v_lightAttenuation * v_SingleLightDiffuseAccumulator;
 #if defined(SPECULAR)
 #if defined(ANISO_LIGHTING)
+#if defined(HAIR)
+        v_SpecularAccumulator += v_lightAttenuation * HairAnisotropicSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
+#else
         v_SpecularAccumulator += v_lightAttenuation * AnisotropicSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#endif
 #else
         v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
@@ -602,7 +640,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // IBL
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
 
-    float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * input.VertexColor.xyz;
+    float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * v_VertexColor.xyz;
 
 #if defined(ENVMAP)
     v_OutDiffuse += v_DiffuseAccumulator.xyz * v_EnvMapColor.xyz;
