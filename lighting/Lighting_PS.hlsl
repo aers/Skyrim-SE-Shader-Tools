@@ -264,12 +264,18 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_RimPower = LightingEffectParams.y; // fRimLightPower
 #endif
 
+#if defined(FACEGEN) || defined(FACEGEN_RGB_TINT)
 #if defined(FACEGEN)
     float3 v_DetailColor = TexDetailSampler.Sample(DetailSampler, v_TexCoords.xy).xyz;
     // the compiler optimizes this in a way different from the vanilla shader so we may have slightly difference precision but no one will notice
-    v_DetailColor = (v_DetailColor + (1 / 255)) * (255 / 64);
+    v_DetailColor = (v_DetailColor + (1.0 / 255.0)) * (255.0 / 64.0);
 
     float3 v_TintColor = TexTintSampler.Sample(TintSampler, v_TexCoords.xy).xyz;
+#elif defined(FACEGEN_RGB_TINT)
+    // these are close to 258/255 and 254/255
+    float3 v_DetailColor = float3(1.01172, 0.996094, 1.01172);
+    float3 v_TintColor = TintColor.xyz;
+#endif
     // probably some known blend function?
     v_TintDiffuseOverlay = v_Diffuse.xyz * v_Diffuse.xyz + 2 * (v_TintColor * v_Diffuse.xyz) - 2 * (v_TintColor * v_Diffuse.xyz) * v_Diffuse.xyz;
 
