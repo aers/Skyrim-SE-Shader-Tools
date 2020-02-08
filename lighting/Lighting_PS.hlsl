@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP
+// support technique: NONE, ENVMAP, GLOWMAP
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -78,6 +78,10 @@ SamplerState EnvSampler : register(s4);
 Texture2D<float4> TexEnvSampler : register(t4);
 SamplerState EnvMaskSampler : register(s5);
 Texture2D<float4> TexEnvMaskSampler : register(t5);
+#endif
+#if defined(GLOWMAP)
+SamplerState GlowSampler : register(s6);
+Texture2D<float4> TexGlowSampler : register(t6);
 #endif
 #if defined(PROJECTED_UV)
 SamplerState ProjectedNormalSampler : register(s8);
@@ -535,7 +539,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
         );
     v_DiffuseAccumulator += DirectionalAmbientNormal.xyz;
 
+#if defined(GLOWMAP)
+    float3 v_GlowColor = TexGlowSampler.Sample(GlowSampler, input.TexCoords.xy).xyz;
+    v_DiffuseAccumulator += EmitColor.xyz * v_GlowColor.xyz;
+#else
     v_DiffuseAccumulator += EmitColor.xyz;
+#endif
 
     // IBL
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
