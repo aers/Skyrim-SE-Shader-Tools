@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support NONE Technique only
+// support technique: NONE, ENVMAP
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -72,6 +72,14 @@ Texture2D<float4> TexSpecularSampler : register(t2);
 #if defined(PROJECTED_UV)
 SamplerState ProjectedDiffuseSampler : register(s3);
 Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
+#endif
+#if defined(ENVMAP)
+SamplerState EnvSampler : register(s4);
+Texture2D<float4> TexEnvSampler : register(t4);
+SamplerState EnvMaskSampler : register(s5);
+Texture2D<float4> TexEnvMaskSampler : register(t5);
+#endif
+#if defined(PROJECTED_UV)
 SamplerState ProjectedNormalSampler : register(s8);
 Texture2D<float4> TexProjectedNormalSampler : register(t8);
 #endif
@@ -484,6 +492,20 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     }
 
+#if defined(ENVMAP)
+    float v_EnvMapMask = TexEnvMaskSampler.Sample(EnvMaskSampler, input.TexCoords.xy).x;
+
+    float v_EnvMapScale = EnvmapData.x;
+    float v_EnvMapLODFade = MaterialData.x;
+    float v_HasEnvMapMask = EnvmapData.y;
+    
+    // if/else implemented as lerp with 0.0/1.0 param
+    float v_EnvMapIntensity = lerp(v_SpecularPower, v_EnvMapMask, v_HasEnvMapMask) * v_EnvMapScale * v_EnvMapLODFade;
+    float3 v_ReflectionVec = 2 * dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz) * v_CommonSpaceNormal.xyz - v_ViewDirectionVec.xyz;
+
+    float3 v_EnvMapColor = TexEnvSampler.Sample(EnvSampler, v_ReflectionVec.xyz).xyz * v_EnvMapIntensity;
+#endif
+
     // toggled by cl on/off
     // brightens the output
 #if defined(CHARACTER_LIGHT)
@@ -519,6 +541,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_DiffuseAccumulator += IBLParams.yzw * IBLParams.x;
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * input.VertexColor.xyz;
+
+#if defined(ENVMAP)
+    v_OutDiffuse += v_DiffuseAccumulator.xyz * v_EnvMapColor.xyz;
+#endif
 
 #if defined(SPECULAR) 
     float3 v_OutSpecular;
