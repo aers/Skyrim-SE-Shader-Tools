@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODLANDNOISE
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -126,6 +126,10 @@ Texture2D<float4> TexWorldMapOverlayNormalSnowSampler : register(t13);
 #if defined(DEFSHADOW) || defined(SHADOW_DIR)
 SamplerState ShadowMaskSampler : register(s14);
 Texture2D<float4> TexShadowMaskSampler : register(t14);
+#endif
+#if defined(LODLANDNOISE)
+SamplerState LODNoiseSampler : register(s15);
+Texture2D<float4> TexLODNoiseSampler : register(t15);
 #endif
 
 struct PS_OUTPUT
@@ -257,9 +261,16 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float4 v_Normal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xyzw;
 #endif
 
-    v_Normal.xyz = v_Normal.xyz * 2 - 1;
+#if defined(LODLANDSCAPE)
+    v_Normal.xyz = v_Normal.xyz - 0.5;
+    v_Normal.xyz = 2 * v_Normal.xyz;
+#else
+    v_Normal.xyz = v_Normal.xyz * 2.0 - 1.0;
+#endif
 
-#if defined(MODELSPACENORMALS)
+#if defined(LODLANDSCAPE)
+    float v_SpecularPower = 0;
+#elif defined(MODELSPACENORMALS)
     float v_SpecularPower = TexSpecularSampler.Sample(SpecularSampler, v_TexCoords.xy).x;
 #else
     float v_SpecularPower = v_Normal.w;
@@ -320,6 +331,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_VertexBitangent = float3(input.TangentModelTransform0.x, input.TangentModelTransform1.x, input.TangentModelTransform2.x);
 #endif
 #endif
+#endif
+
+#if defined(LODLANDNOISE)
+    float v_NoiseFactor = 0.800 * smoothstep(0.4, 1.0, dot(v_Diffuse.xyz, float3(0.550000, 0.550000, 0.550000)));
+    float2 v_NoiseCoords = v_TexCoords * 3;
+    float v_TexNoise = TexLODNoiseSampler.Sample(LODNoiseSampler, v_NoiseCoords.xy).x;
+    float v_Noise = lerp(v_TexNoise, 0.370000, v_NoiseFactor) * 0.833333 + 0.370000;
+    v_Diffuse.xyz = v_Diffuse.xyz * v_Noise;
 #endif
 #if defined(WORLD_MAP) 
     // need to implement LODLand/LODObj/LODObjHD to be sure of this, so not bothering yet
