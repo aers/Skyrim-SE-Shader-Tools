@@ -89,7 +89,7 @@ Texture2D<float4> TexDetailSampler : register(t4);
 #endif
 #if defined(ENVMAP)
 SamplerState EnvSampler : register(s4);
-Texture2D<float4> TexEnvSampler : register(t4);
+TextureCube<float4> TexEnvSampler : register(t4);
 SamplerState EnvMaskSampler : register(s5);
 Texture2D<float4> TexEnvMaskSampler : register(t5);
 #endif
