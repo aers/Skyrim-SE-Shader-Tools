@@ -237,7 +237,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_TangentViewDirection = normalize(float3(
         dot(v_CommonTangentMatrix[0].xyz, input.ViewDirectionVec.xyz),
         dot(v_CommonTangentMatrix[1].xyz, input.ViewDirectionVec.xyz),
-        dot(v_CommonTangentMatrix[2].xyz, input.ViewDirectionVec.xyz));
+        dot(v_CommonTangentMatrix[2].xyz, input.ViewDirectionVec.xyz)));
 
     float height = TexHeightSampler.Sample(HeightSampler, input.TexCoords.xy).x * 0.0800 - 0.0400;
 #if defined(FIX_VANILLA_BUGS)
@@ -294,7 +294,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_TintColor = TintColor.xyz;
 #endif
     // probably some known blend function?
-    v_TintDiffuseOverlay = v_Diffuse.xyz * v_Diffuse.xyz + 2 * (v_TintColor * v_Diffuse.xyz) - 2 * (v_TintColor * v_Diffuse.xyz) * v_Diffuse.xyz;
+    float3 v_TintDiffuseOverlay = v_Diffuse.xyz * v_Diffuse.xyz + 2 * (v_TintColor * v_Diffuse.xyz) - 2 * (v_TintColor * v_Diffuse.xyz) * v_Diffuse.xyz;
 
     v_Diffuse.xyz = v_TintDiffuseOverlay * v_DetailColor;
 #endif
