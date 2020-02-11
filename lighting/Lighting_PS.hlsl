@@ -1,7 +1,7 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODLANDNOISE
-// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODOBJECTS, LODOBJECTSHD, LODLANDNOISE
+// support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, WORLD_MAP, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
 #include "LightingCommon.h"
@@ -332,7 +332,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #endif
 
-#if defined(WORLD_MAP) || defined(LODLANDNOISE)
+#if defined(WORLD_MAP) || defined(LODLANDNOISE) && !defined(LODOBJECTS)
     float v_LODBlendFactor = smoothstep(0.4, 1.0, dot(v_Diffuse.xyz, float3(0.550000, 0.550000, 0.550000)));
 #if !defined(WORLD_MAP)
     v_LODBlendFactor = 0.800 * v_LODBlendFactor;
@@ -346,7 +346,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_Diffuse.xyz = v_Diffuse.xyz * v_Noise;
 #endif
 
-#if defined(WORLD_MAP) 
+    // this is always MSN and uses the snow sampler too
+#if defined(WORLD_MAP) && defined(LODLANDSCAPE)
     float3 v_NormalN = normalize(v_Normal.xyz);
     float3 v_AdjNormal = max(float3(0.01, 0.01, 0.01), pow(7 * (abs(v_NormalN) - 0.200000), 3));
     v_AdjNormal = v_AdjNormal / dot(v_AdjNormal, float3(1, 1, 1));
@@ -377,7 +378,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_Tangent = normalize(float3(v_Normal.z, 0, -v_Normal.x));
     float3 v_Bitangent = normalize(cross(v_Tangent.xyz, v_Normal.xyz));
 
-    float3x3 v_TBN = float3x3(v_Tangent, v_Bitangent, v_Normal);
+    float3x3 v_TBN = float3x3(v_Tangent, v_Bitangent, v_Normal.xyz);
 
     float3 v_BlendedWorldMapOverlayNormalWMapSpace = normalize(mul(v_BlendedWorldMapOverlayNormal, v_TBN));
     float v_LengthSquared = dot(v_BlendedWorldMapOverlayNormalWMapSpace, v_BlendedWorldMapOverlayNormalWMapSpace);
@@ -386,22 +387,26 @@ PS_OUTPUT PSMain(PS_INPUT input)
     {
         v_Normal.xyz = lerp(v_Normal.xyz, v_BlendedWorldMapOverlayNormalWMapSpace, v_WMapNormalBlendFactor);
     }  
+#endif
 
-    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2;
-    float3 v_DiffuseTint = v_LODBlendFactor * float3(0.270, 0.281, 0.441) + float3(0.078, 0.098, 0.465);
+    // this is always not MSN and doesn't use the snow sampler
+#if defined(WORLD_MAP) && (defined(LODOBJECTS) || defined(LODOBJECTSHD))
+    float3 v_AdjNormal = max(float3(0.01, 0.01, 0.01), pow(7 * (abs(v_VertexNormalN) - 0.200000), 3));
+    v_AdjNormal = v_AdjNormal / dot(v_AdjNormal, float3(1, 1, 1));
 
-    v_DiffuseTint.xy = max(2 * v_DiffuseTint.xy, v_Diffuse.xy);
+    float v_MapMenuOverlayScale = WorldMapOverlayParametersPS.x;
 
-    if (v_DiffuseTint.z > 0.5)
-    {
-        v_DiffuseTint.z = max(2 * (v_LODBlendFactor * 0.441 - 0.034), v_Diffuse.z);
-    }
-    else
-    {
-        v_DiffuseTint.z = min(v_DiffuseTint.z, v_Diffuse.z);
-    }
+    float3x3 v_WorldMapOverlayNormalTransform = float3x3(
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.yz * v_MapMenuOverlayScale).xyz,
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.xz * v_MapMenuOverlayScale).xyz,
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.xy * v_MapMenuOverlayScale).xyz
+        );
 
-    v_Diffuse.xyz = lerp(v_Diffuse.xyz, v_DiffuseTint.xyz, v_AdjLODBlendFactor);
+    float3 v_WorldMapOverlayNormal = normalize(2 * (mul(v_AdjNormal, v_WorldMapOverlayNormalTransform) - 0.5));
+
+    float v_MapMenuOverlayNormalStrength = WorldMapOverlayParametersPS.z;
+
+    v_Normal.xyz = lerp(v_WorldMapOverlayNormal.xyz, v_Normal.xyz, v_MapMenuOverlayNormalStrength);
 #endif
 
     float4 v_CommonSpaceNormal;
@@ -447,7 +452,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_ProjUVNoise = TexProjectedNoiseSampler.Sample(ProjectedNoiseSampler, v_ProjectedUVCoords.xy).x;
     float3 v_ProjDirN = normalize(input.ProjDir.xyz);
     float v_NdotP = dot(v_CommonSpaceNormal.xyz, v_ProjDirN.xyz);
+#if defined(LODOBJECTSHD)
+    float v_ProjDiffuseIntensity = (-0.5 + input.VertexColor.w) * 2.5 + v_NdotP - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
+#else
     float v_ProjDiffuseIntensity = v_NdotP * input.VertexColor.w - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
+#endif
 #if defined(SNOW)
     float v_ProjUVDoSnowRim = 0;
 #endif
@@ -508,6 +517,30 @@ PS_OUTPUT PSMain(PS_INPUT input)
         }
 #endif
     }
+#endif
+
+#if defined(WORLD_MAP) && ((defined(LODLANDSCAPE) || defined(LODOBJECTSHD)) || (defined(LODOBJECTS) && defined(PROJECTED_UV)))
+#if defined(LODOBJECTS)
+    float v_LODBlendFactor = saturate(v_ProjDiffuseIntensity * 10);
+    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.5;
+#else
+    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2;
+#endif
+
+    float3 v_DiffuseTint = v_LODBlendFactor * float3(0.270, 0.281, 0.441) + float3(0.078, 0.098, 0.465);
+
+    v_DiffuseTint.xy = max(2 * v_DiffuseTint.xy, v_Diffuse.xy);
+
+    if (v_DiffuseTint.z > 0.5)
+    {
+        v_DiffuseTint.z = max(2 * (v_LODBlendFactor * 0.441 - 0.035), v_Diffuse.z);
+    }
+    else
+    {
+        v_DiffuseTint.z = min(v_DiffuseTint.z, v_Diffuse.z);
+    }
+
+    v_Diffuse.xyz = lerp(v_Diffuse.xyz, v_DiffuseTint.xyz, v_AdjLODBlendFactor);
 #endif
 
 #if defined(DEFSHADOW) || defined(SHADOW_DIR)
@@ -811,10 +844,18 @@ PS_OUTPUT PSMain(PS_INPUT input)
         discard;
     }
 
+#if defined(LODOBJECTS) || defined(LODOBJECTSHD)
+    float v_OutAlpha = v_Diffuse.w;
+#else
     float v_OutAlpha = input.VertexColor.w * v_Diffuse.w;
+#endif
 #else
     // MaterialData.z = LightingProperty Alpha
+#if defined(LODOBJECTS) || defined(LODOBJECTSHD)
+    float v_OutAlpha = MaterialData.z * v_Diffuse.w;
+#else
     float v_OutAlpha = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
+#endif
 #endif
 
 #if defined(DEPTH_WRITE_DECALS)
