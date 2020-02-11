@@ -182,7 +182,6 @@ float3 HairAnisotropicSpecular(float3 a_lightDirectionN, float3 a_lightColor, fl
     float v_spec_2 = pow(v_anisoIntensity_2, a_specularPower);
 
     return a_lightColor * (v_spec_2 * a_HairTintVertexColor + v_spec_1) * max(0, a_lightDirectionN.z);
-
 }
 
 float3 SoftLighting(float3 a_lightDirection, float3 a_lightColor, float3 a_softMask, float a_softRolloff, float3 a_Normal)
@@ -333,15 +332,76 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #endif
 
+#if defined(WORLD_MAP) || defined(LODLANDNOISE)
+    float v_LODBlendFactor = smoothstep(0.4, 1.0, dot(v_Diffuse.xyz, float3(0.550000, 0.550000, 0.550000)));
+#if !defined(WORLD_MAP)
+    v_LODBlendFactor = 0.800 * v_LODBlendFactor;
+#endif
+#endif
+
 #if defined(LODLANDNOISE)
-    float v_NoiseFactor = 0.800 * smoothstep(0.4, 1.0, dot(v_Diffuse.xyz, float3(0.550000, 0.550000, 0.550000)));
     float2 v_NoiseCoords = v_TexCoords * 3;
     float v_TexNoise = TexLODNoiseSampler.Sample(LODNoiseSampler, v_NoiseCoords.xy).x;
-    float v_Noise = lerp(v_TexNoise, 0.370000, v_NoiseFactor) * 0.833333 + 0.370000;
+    float v_Noise = lerp(v_TexNoise, 0.370000, v_LODBlendFactor) * 0.833333 + 0.370000;
     v_Diffuse.xyz = v_Diffuse.xyz * v_Noise;
 #endif
+
 #if defined(WORLD_MAP) 
-    // need to implement LODLand/LODObj/LODObjHD to be sure of this, so not bothering yet
+    float3 v_NormalN = normalize(v_Normal.xyz);
+    float3 v_AdjNormal = max(float3(0.01, 0.01, 0.01), pow(7 * (abs(v_NormalN) - 0.200000), 3));
+    v_AdjNormal = v_AdjNormal / dot(v_AdjNormal, float3(1, 1, 1));
+
+    float v_MapMenuOverlayScale = WorldMapOverlayParametersPS.x;
+    float v_MapMenuOverlaySnowScale = WorldMapOverlayParametersPS.w;
+
+    float3x3 v_WorldMapOverlayNormalTransform = float3x3(
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.yz * v_MapMenuOverlayScale).xyz,
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.xz * v_MapMenuOverlayScale).xyz,
+        TexWorldMapOverlayNormalSampler.Sample(WorldMapOverlayNormalSampler, input.WorldMapVertexPos.xy * v_MapMenuOverlayScale).xyz
+        );
+
+    float3x3 v_WorldMapOverlayNormalSnowTransform = float3x3(
+        TexWorldMapOverlayNormalSnowSampler.Sample(WorldMapOverlayNormalSnowSampler, input.WorldMapVertexPos.yz * v_MapMenuOverlaySnowScale).xyz,
+        TexWorldMapOverlayNormalSnowSampler.Sample(WorldMapOverlayNormalSnowSampler, input.WorldMapVertexPos.xz * v_MapMenuOverlaySnowScale).xyz,
+        TexWorldMapOverlayNormalSnowSampler.Sample(WorldMapOverlayNormalSnowSampler, input.WorldMapVertexPos.xy * v_MapMenuOverlaySnowScale).xyz
+        );
+
+    // NOTE: row vector/row-major matrix
+    float3 v_WorldMapOverlayNormal = mul(v_AdjNormal, v_WorldMapOverlayNormalTransform);
+    float3 v_WorldMapOverlayNormalSnow = mul(v_AdjNormal, v_WorldMapOverlayNormalSnowTransform);
+
+    float3 v_BlendedWorldMapOverlayNormal = normalize(2 * (lerp(v_WorldMapOverlayNormal, v_WorldMapOverlayNormalSnow, v_LODBlendFactor) - 0.5));
+
+    float v_WMapNormalBlendFactor = saturate(1.5 - smoothstep(0.95, 1.0, v_Normal.z));
+
+    float3 v_Tangent = normalize(float3(v_Normal.z, 0, -v_Normal.x));
+    float3 v_Bitangent = normalize(cross(v_Tangent.xyz, v_Normal.xyz));
+
+    float3x3 v_TBN = float3x3(v_Tangent, v_Bitangent, v_Normal);
+
+    float3 v_BlendedWorldMapOverlayNormalTSpace = normalize(mul(v_BlendedWorldMapOverlayNormal, v_TBN));
+    float v_LengthSquared = dot(v_BlendedWorldMapOverlayNormalTSpace, v_BlendedWorldMapOverlayNormalTSpace);
+
+    if (v_LengthSquared > 0.999 && v_LengthSquared < 1.001)
+    {
+        v_Normal.xyz = lerp(v_Normal.xyz, v_BlendedWorldMapOverlayNormalTSpace, v_WMapNormalBlendFactor);
+    }  
+
+    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2;
+    float3 v_DiffuseTint = v_LODBlendFactor * float3(0.270, 0.281, 0.441) + float3(0.078, 0.098, 0.465);
+
+    v_DiffuseTint.xy = max(2 * v_DiffuseTint.xy, v_Diffuse.xy);
+
+    if (v_DiffuseTint.z > 0.5)
+    {
+        v_DiffuseTint.z = max(2 * (v_LODBlendFactor * 0.441 - 0.034), v_Diffuse.z);
+    }
+    else
+    {
+        v_DiffuseTint.z = min(v_DiffuseTint.z, v_Diffuse.z);
+    }
+
+    v_Diffuse.xyz = lerp(v_Diffuse.xyz, v_DiffuseTint.xyz, v_AdjLODBlendFactor);
 #endif
 
     float4 v_CommonSpaceNormal;
@@ -372,7 +432,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3 v_CommonSpaceVertexPos;
 
-#if defined(DRAW_IN_WORLDSPACE)
+#if defined(WORLD_MAP)
+    v_CommonSpaceVertexPos = input.WorldMapVertexPos;
+#elif defined(DRAW_IN_WORLDSPACE)
     v_CommonSpaceVertexPos = input.WorldSpaceVertexPos;
 #else
     v_CommonSpaceVertexPos = input.ModelSpaceVertexPos;
