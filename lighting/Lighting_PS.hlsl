@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, TREE_ANIM, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, WORLD_MAP, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -454,6 +454,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_NdotP = dot(v_CommonSpaceNormal.xyz, v_ProjDirN.xyz);
 #if defined(LODOBJECTSHD)
     float v_ProjDiffuseIntensity = (-0.5 + input.VertexColor.w) * 2.5 + v_NdotP - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
+#elif defined(TREE_ANIM)
+    float v_ProjDiffuseIntensity = v_NdotP - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
 #else
     float v_ProjDiffuseIntensity = v_NdotP * input.VertexColor.w - ProjectedUVParams.w - (ProjectedUVParams.x * v_ProjUVNoise);
 #endif
@@ -850,14 +852,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
         discard;
     }
 
-#if defined(LODOBJECTS) || defined(LODOBJECTSHD)
+#if defined(LODOBJECTS) || defined(LODOBJECTSHD) || defined(TREE_ANIM)
     float v_OutAlpha = v_Diffuse.w;
 #else
     float v_OutAlpha = input.VertexColor.w * v_Diffuse.w;
 #endif
 #else
     // MaterialData.z = LightingProperty Alpha
-#if defined(LODOBJECTS) || defined(LODOBJECTSHD)
+#if defined(LODOBJECTS) || defined(LODOBJECTSHD) || defined(TREE_ANIM)
     float v_OutAlpha = MaterialData.z * v_Diffuse.w;
 #else
     float v_OutAlpha = input.VertexColor.w * MaterialData.z * v_Diffuse.w;
