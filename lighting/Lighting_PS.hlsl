@@ -718,7 +718,6 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // if/else implemented as lerp with 0.0/1.0 param
     float v_EnvMapIntensity = lerp(v_SpecularPower, v_EnvMapMask, v_HasEnvMapMask) * v_EnvMapScale * v_EnvMapLODFade;
     float3 v_ReflectionVec = 2 * dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz) * v_CommonSpaceNormal.xyz - v_ViewDirectionVec.xyz;
-#endif
 
     float3 v_EnvMapColor = TexEnvSampler.Sample(EnvSampler, v_ReflectionVec.xyz).xyz * v_EnvMapIntensity;
 #endif
