@@ -379,12 +379,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3x3 v_TBN = float3x3(v_Tangent, v_Bitangent, v_Normal);
 
-    float3 v_BlendedWorldMapOverlayNormalTSpace = normalize(mul(v_BlendedWorldMapOverlayNormal, v_TBN));
-    float v_LengthSquared = dot(v_BlendedWorldMapOverlayNormalTSpace, v_BlendedWorldMapOverlayNormalTSpace);
+    float3 v_BlendedWorldMapOverlayNormalWMapSpace = normalize(mul(v_BlendedWorldMapOverlayNormal, v_TBN));
+    float v_LengthSquared = dot(v_BlendedWorldMapOverlayNormalWMapSpace, v_BlendedWorldMapOverlayNormalWMapSpace);
 
     if (v_LengthSquared > 0.999 && v_LengthSquared < 1.001)
     {
-        v_Normal.xyz = lerp(v_Normal.xyz, v_BlendedWorldMapOverlayNormalTSpace, v_WMapNormalBlendFactor);
+        v_Normal.xyz = lerp(v_Normal.xyz, v_BlendedWorldMapOverlayNormalWMapSpace, v_WMapNormalBlendFactor);
     }  
 
     float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2;
