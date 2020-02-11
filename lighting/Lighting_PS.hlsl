@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODOBJECTS, LODOBJECTSHD, LODLANDNOISE
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, WORLD_MAP, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -87,7 +87,7 @@ Texture2D<float4> TexProjectedDiffuseSampler : register(t3);
 SamplerState DetailSampler : register(s4);
 Texture2D<float4> TexDetailSampler : register(t4);
 #endif
-#if defined(ENVMAP)
+#if defined(ENVMAP) || defined(EYE)
 SamplerState EnvSampler : register(s4);
 TextureCube<float4> TexEnvSampler : register(t4);
 SamplerState EnvMaskSampler : register(s5);
@@ -332,7 +332,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #endif
 
-#if defined(WORLD_MAP) || defined(LODLANDNOISE) && !defined(LODOBJECTS)
+#if (defined(WORLD_MAP) || defined(LODLANDNOISE)) && !defined(LODOBJECTS)
     float v_LODBlendFactor = smoothstep(0.4, 1.0, dot(v_Diffuse.xyz, float3(0.550000, 0.550000, 0.550000)));
 #if !defined(WORLD_MAP)
     v_LODBlendFactor = 0.800 * v_LODBlendFactor;
@@ -701,7 +701,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     }
 
-#if defined(ENVMAP)
+    // TODO: probably need to make this clearer later on, important part is that for the envmap, directional ambient, and ambient specular calculations, EYE uses the eye direction vec instead of the normal
+#if defined(EYE)
+    v_CommonSpaceNormal.xyz = EyeDirectionVec.xyz;
+#endif
+
+#if defined(ENVMAP) || defined(EYE)
     float v_EnvMapMask = TexEnvMaskSampler.Sample(EnvMaskSampler, v_TexCoords.xy).x;
 
     float v_EnvMapScale = EnvmapData.x;
@@ -711,6 +716,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // if/else implemented as lerp with 0.0/1.0 param
     float v_EnvMapIntensity = lerp(v_SpecularPower, v_EnvMapMask, v_HasEnvMapMask) * v_EnvMapScale * v_EnvMapLODFade;
     float3 v_ReflectionVec = 2 * dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz) * v_CommonSpaceNormal.xyz - v_ViewDirectionVec.xyz;
+#endif
 
     float3 v_EnvMapColor = TexEnvSampler.Sample(EnvSampler, v_ReflectionVec.xyz).xyz * v_EnvMapIntensity;
 #endif
@@ -756,7 +762,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * v_VertexColor.xyz;
 
-#if defined(ENVMAP)
+#if defined(ENVMAP) || defined(EYE)
     v_OutDiffuse += v_DiffuseAccumulator.xyz * v_EnvMapColor.xyz;
 #endif
 
