@@ -80,6 +80,14 @@
 #error PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
 #endif
 
+#if defined(MODELSPACENORMALS) && defined(MULTI_LAYER_PARALLAX)
+#error MULTI_LAYER_PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
+#endif
+
+#if defined(PROJECTED_UV) && defined(MULTI_LAYER_PARALLAX)
+#error MULTI_LAYER_PARALLAX technique incomptaible with PROJECTED_UV flag due to re-use of texture slot
+#endif
+
 #if defined(PROJECTED_UV) && defined(FACEGEN)
 #error FACEGEN technique incompatible with PROJECTED_UV flag due to re-use of texture slot
 #endif

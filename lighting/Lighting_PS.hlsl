@@ -1,6 +1,6 @@
 // Skyrim Special Edition - BSLightingShader pixel shader  
 
-// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, TREE_ANIM, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
+// support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, MULTI_LAYER_PARALLAX, TREE_ANIM, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, WORLD_MAP, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
 #include "Common.h"
@@ -96,6 +96,10 @@ Texture2D<float4> TexEnvMaskSampler : register(t5);
 #if defined(GLOWMAP)
 SamplerState GlowSampler : register(s6);
 Texture2D<float4> TexGlowSampler : register(t6);
+#endif
+#if defined(MULTI_LAYER_PARALLAX)
+SamplerState MultiLayerParallaxSampler : register(s8);
+Texture2D<float4> TexMultiLayerParallaxSampler : register(t8);
 #endif
 #if defined(PROJECTED_UV)
 SamplerState ProjectedNormalSampler : register(s8);
@@ -231,17 +235,20 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_ViewDirectionVec = normalize(float3(1, 1, 1));
 #endif
 
-#if defined(PARALLAX)
+#if defined(PARALLAX) || defined(MULTI_LAYER_PARALLAX)
+    // Note: Row-Major
+    // This is how Bethesda does it in MLP, which generates mul+mad+mad instead of having to transpose the matrix before doing 3 dp3s
 #if defined(DRAW_IN_WORLDSPACE)
-    float3x3 v_CommonTangentMatrix = transpose(float3x3(input.TangentWorldTransform0.xyz, input.TangentWorldTransform1.xyz, input.TangentWorldTransform2.xyz));
+    float3x3 v_CommonTangentMatrix = float3x3(input.TangentWorldTransform0.xyz, input.TangentWorldTransform1.xyz, input.TangentWorldTransform2.xyz);
 #else
-    float3x3 v_CommonTangentMatrix = transpose(float3x3(input.TangentModelTransform0.xyz, input.TangentModelTransform1.xyz, input.TangentModelTransform2.xyz));
+    float3x3 v_CommonTangentMatrix = float3x3(input.TangentModelTransform0.xyz, input.TangentModelTransform1.xyz, input.TangentModelTransform2.xyz);
 #endif
-    float3 v_TangentViewDirection = normalize(float3(
-        dot(v_CommonTangentMatrix[0].xyz, input.ViewDirectionVec.xyz),
-        dot(v_CommonTangentMatrix[1].xyz, input.ViewDirectionVec.xyz),
-        dot(v_CommonTangentMatrix[2].xyz, input.ViewDirectionVec.xyz)));
+    float3 v_TangentViewDirection = mul(v_ViewDirectionVec.xyz, v_CommonTangentMatrix);
 
+    float3 v_TangentViewDirectionN = normalize(v_TangentViewDirection);
+#endif
+
+#if defined(PARALLAX)
     float height = TexHeightSampler.Sample(HeightSampler, input.TexCoords.xy).x * 0.0800 - 0.0400;
 #if defined(FIX_VANILLA_BUGS)
     float2 v_TexCoords = v_TangentViewDirection.xy * height + input.TexCoords.xy;
@@ -257,7 +264,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(MODELSPACENORMALS)
     float3 v_Normal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xzy;
 #else
-    float4 v_Normal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xyzw;
+    // save original for MultiLayerParallax
+    float4 v_OrigNormal = TexNormalSampler.Sample(NormalSampler, v_TexCoords.xy).xyzw;
+    float4 v_Normal = v_OrigNormal;
 #endif
 
 #if defined(LODLANDSCAPE)
@@ -751,6 +760,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
         );
     v_DiffuseAccumulator += DirectionalAmbientNormal.xyz;
 
+#if defined(MULTI_LAYER_PARALLAX)
+    float3 v_DiffuseBeforeEmit = v_DiffuseAccumulator;
+#endif
+
 #if defined(GLOWMAP)
     float3 v_GlowColor = TexGlowSampler.Sample(GlowSampler, v_TexCoords.xy).xyz;
     v_DiffuseAccumulator += EmitColor.xyz * v_GlowColor.xyz;
@@ -763,8 +776,36 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     float3 v_OutDiffuse = v_DiffuseAccumulator.xyz * v_Diffuse.xyz * v_VertexColor.xyz;
 
+#if defined(MULTI_LAYER_PARALLAX)
+    float v_MLPLayerThickness = MultiLayerParallaxData.x;
+    float v_MLPRefractionScale = MultiLayerParallaxData.y;
+    float2 v_MLPUVScale = MultiLayerParallaxData.zw;
+
+    float v_MLPThickness = TexMultiLayerParallaxSampler.Sample(MultiLayerParallaxSampler, v_TexCoords.xy).w * v_MLPLayerThickness;
+
+    float3 v_MLPAdjustedNormal = v_MLPRefractionScale * (v_OrigNormal.xyz * 2 - float3(1, 1, 2)) + float3(0, 0, 1);
+
+    float3 v_MLPReflectionVec = -2 * dot(-v_TangentViewDirection, v_MLPAdjustedNormal) * v_MLPAdjustedNormal - v_TangentViewDirection;
+
+    // 0.0009765625 = 1/1024
+    v_MLPReflectionVec.z = v_MLPThickness / abs(v_MLPReflectionVec.z) * 0.0009765625;
+    v_MLPReflectionVec.xy = v_MLPReflectionVec.xy * v_MLPReflectionVec.z;
+
+    float2 v_MLPCoords = v_TexCoords.xy * v_MLPUVScale.xy + v_MLPReflectionVec.xy;
+
+    float3 v_MLPColor = TexMultiLayerParallaxSampler.Sample(MultiLayerParallaxSampler, v_MLPCoords.xy).xyz * input.VertexColor.xyz;
+
+    float v_MLPBlendFactor = saturate(v_EnvMapScale * v_EnvMapLODFade) * (1 - v_Diffuse.w);
+
+    float3 v_MLPBlendedColor = lerp(v_OutDiffuse, v_MLPColor * v_DiffuseBeforeEmit, v_MLPBlendFactor);
+#endif
+
 #if defined(ENVMAP) || defined(EYE)
     v_OutDiffuse += v_DiffuseAccumulator.xyz * v_EnvMapColor.xyz;
+#endif
+
+#if defined(MULTI_LAYER_PARALLAX)
+    v_OutDiffuse += v_MLPBlendedColor;
 #endif
 
 #if defined(SPECULAR) 
