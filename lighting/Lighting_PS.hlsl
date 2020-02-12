@@ -235,7 +235,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_ViewDirectionVec = normalize(float3(1, 1, 1));
 #endif
 
-#if defined(PARALLAX) || defined(MULTI_LAYER_PARALLAX)
+#if defined(PARALLAX) || defined(PARALLAX_OCC) || defined(MULTI_LAYER_PARALLAX)
     // Note: Row-Major
     // This is how Bethesda does it in MLP, which generates mul+mad+mad instead of having to transpose the matrix before doing 3 dp3s
 #if defined(DRAW_IN_WORLDSPACE)
@@ -257,6 +257,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #else
     float2 v_TexCoords = input.TexCoords.xy;
+#endif
+
+#if defined(PARALLAX_OCC)
+    // implement here
 #endif
 
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
@@ -535,7 +539,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float v_LODBlendFactor = saturate(v_ProjDiffuseIntensity * 10);
     float v_AdjLODBlendFactor = v_LODBlendFactor * 0.5;
 #else
-    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2;
+    float v_AdjLODBlendFactor = v_LODBlendFactor * 0.2 + 0.3;
 #endif
 
     float3 v_DiffuseTint = v_LODBlendFactor * float3(0.270, 0.281, 0.441) + float3(0.078, 0.098, 0.465);
@@ -714,7 +718,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
     // TODO: probably need to make this clearer later on, important part is that for the envmap, directional ambient, and ambient specular calculations, EYE uses the eye direction vec instead of the normal
 #if defined(EYE)
-    v_CommonSpaceNormal.xyz = EyeDirectionVec.xyz;
+    v_CommonSpaceNormal.xyz = input.EyeDirectionVec.xyz;
 #endif
 
 #if defined(ENVMAP) || defined(EYE)
