@@ -61,6 +61,7 @@ cbuffer PerGeometry : register(b2)
     float2 NumLightNumShadowLight                : packoffset(c29);     // @ 116 - 0x01D0
 }
 
+#if !defined(MULTI_TEXTURE)
 SamplerState DiffuseSampler : register(s0);
 Texture2D<float4> TexDiffuseSampler : register(t0);
 SamplerState NormalSampler : register(s1);
@@ -127,13 +128,49 @@ Texture2D<float4> TexWorldMapOverlayNormalSampler : register(t12);
 SamplerState WorldMapOverlayNormalSnowSampler : register(s13);
 Texture2D<float4> TexWorldMapOverlayNormalSnowSampler : register(t13);
 #endif
-#if defined(DEFSHADOW) || defined(SHADOW_DIR)
-SamplerState ShadowMaskSampler : register(s14);
-Texture2D<float4> TexShadowMaskSampler : register(t14);
-#endif
 #if defined(LODLANDNOISE)
 SamplerState LODNoiseSampler : register(s15);
 Texture2D<float4> TexLODNoiseSampler : register(t15);
+#endif
+#endif
+
+#if defined(MULTI_TEXTURE)
+SamplerState MTLandDiffuseBase : register(s0);
+Texture2D<float4> TexMTLandDiffuseBase : register(t0);
+SamplerState MTLandDiffuse1 : register(s1);
+Texture2D<float4> TexMTLandDiffuse1 : register(t1);
+SamplerState MTLandDiffuse2 : register(s2);
+Texture2D<float4> TexMTLandDiffuse2 : register(t2);
+SamplerState MTLandDiffuse3 : register(s3);
+Texture2D<float4> TexMTLandDiffuse3 : register(t3);
+SamplerState MTLandDiffuse4 : register(s4);
+Texture2D<float4> TexMTLandDiffuse4 : register(t4);
+SamplerState MTLandDiffuse5 : register(s5);
+Texture2D<float4> TexMTLandDiffuse5 : register(t5);
+SamplerState MTLandNormalBase : register(s7);
+Texture2D<float4> TexMTLandNormalBase : register(t7);
+SamplerState MTLandNormal1 : register(s8);
+Texture2D<float4> TexMTLandNormal1 : register(t8);
+SamplerState MTLandNormal2 : register(s9);
+Texture2D<float4> TexMTLandNormal2 : register(t9);
+SamplerState MTLandNormal3 : register(s10);
+Texture2D<float4> TexMTLandNormal3 : register(t10);
+SamplerState MTLandNormal4 : register(s11);
+Texture2D<float4> TexMTLandNormal4 : register(t11);
+SamplerState MTLandNormal5 : register(s12);
+Texture2D<float4> TexMTLandNormal5 : register(t12);
+#endif
+
+#if defined(LOD_LAND_BLEND)
+SamplerState MTLandTerrainOverlayTexture : register(s13);
+Texture2D<float4> TexMTLandTerrainOverlayTexture : register(t13);
+SamplerState MTLandTerrainNoiseTexture : register(s15);
+Texture2D<float4> TexMTLandTerrainNoiseTexture : register(t15);
+#endif
+
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+SamplerState ShadowMaskSampler : register(s14);
+Texture2D<float4> TexShadowMaskSampler : register(t14);
 #endif
 
 struct PS_OUTPUT
@@ -263,6 +300,53 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // implement here
 #endif
 
+#if defined(MULTI_TEXTURE)
+#if defined(SNOW)
+    float v_bEnableSnowMask = LandscapeTexture5to6IsSnow.z;
+    float4 v_DiffuseBase = TexMTLandDiffuseBase.Sample(MTLandDiffuseBase, v_TexCoords.xy).xyzw;
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_DiffuseBase.w
+    // implemented as lerp
+    float v_DiffuseBaseIsSnow = lerp(1, v_DiffuseBase.w, v_EnableSnowMask);
+#else
+    // this generates different code than their version probably because the SNOW code is interweaved within, but I made it separate so :shrug:
+    float3 v_DiffuseBase = TexMTLandDiffuseBase.Sample(MTLandDiffuseBase, v_TexCoords.xy).xyz;
+    float3 v_DiffuseLayer1 = TexMTLandDiffuse1.Sample(MTLandDiffuse1, v_TexCoords.xy).xyz;
+    float3 v_DiffuseLayer2 = TexMTLandDiffuse2.Sample(MTLandDiffuse2, v_TexCoords.xy).xyz;
+    float3 v_DiffuseLayer3 = TexMTLandDiffuse3.Sample(MTLandDiffuse3, v_TexCoords.xy).xyz;
+    float3 v_DiffuseLayer4 = TexMTLandDiffuse4.Sample(MTLandDiffuse4, v_TexCoords.xy).xyz;
+    float3 v_DiffuseLayer5 = TexMTLandDiffuse5.Sample(MTLandDiffuse5, v_TexCoords.xy).xyz;
+
+    float4 v_NormalBase = TexMTLandNormalBase.Sample(MTLandNormalBase, v_TexCoords.xy).xyzw;
+    v_NormalBase.xyz = v_NormalBase.xyz * 2 - 1;
+    float4 v_NormalLayer1 = TexMTLandNormal1.Sample(MTLandNormal1, v_TexCoords.xy).xyzw;
+    v_NormalLayer1.xyz = v_NormalLayer1.xyz * 2 - 1;
+    float4 v_NormalLayer2 = TexMTLandNormal2.Sample(MTLandNormal2, v_TexCoords.xy).xyzw;
+    v_NormalLayer2.xyz = v_NormalLayer2.xyz * 2 - 1;
+    float4 v_NormalLayer3 = TexMTLandNormal3.Sample(MTLandNormal3, v_TexCoords.xy).xyzw;
+    v_NormalLayer3.xyz = v_NormalLayer3.xyz * 2 - 1;
+    float4 v_NormalLayer4 = TexMTLandNormal4.Sample(MTLandNormal4, v_TexCoords.xy).xyzw;
+    v_NormalLayer4.xyz = v_NormalLayer4.xyz * 2 - 1;
+    float4 v_NormalLayer5 = TexMTLandNormal5.Sample(MTLandNormal5, v_TexCoords.xy).xyzw;
+    v_NormalLayer5.xyz = v_NormalLayer5.xyz * 2 - 1;
+
+    float4 v_Diffuse = float4(  
+        v_DiffuseBase.xyz * input.BlendWeight0.x
+        + v_DiffuseLayer1.xyz * input.BlendWeight0.y
+        + v_DiffuseLayer2.xyz * input.BlendWeight0.z
+        + v_DiffuseLayer3.xyz * input.BlendWeight0.w
+        + v_DiffuseLayer4.xyz * input.BlendWeight1.x
+        + v_DiffuseLayer5.xyz * input.BlendWeight1.y,
+        0);
+
+    float4 v_Normal = v_NormalBase.xyzw * input.BlendWeight0.x
+        + v_NormalLayer1.xyzw * input.BlendWeight0.y
+        + v_NormalLayer2.xyzw * input.BlendWeight0.z
+        + v_NormalLayer3.xyzw * input.BlendWeight0.w
+        + v_NormalLayer4.xyzw * input.BlendWeight1.x
+        + v_NormalLayer5.xyzw * input.BlendWeight1.y;
+#endif
+#else
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
 
 #if defined(MODELSPACENORMALS)
@@ -278,6 +362,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     v_Normal.xyz = 2 * v_Normal.xyz;
 #else
     v_Normal.xyz = v_Normal.xyz * 2.0 - 1.0;
+#endif
 #endif
 
 #if defined(LODLANDSCAPE)
@@ -587,6 +672,13 @@ PS_OUTPUT PSMain(PS_INPUT input)
 
 #if defined(SPECULAR)
     float3 v_SpecularAccumulator = 0;
+#if defined(MULTI_TEXTURE)
+    // blend specular shininess
+    float v_SpecularShininess = dot(LandscapeTexture1to4IsSpecPower.xyzw, input.BlendWeight0.xyzw);
+    v_SpecularShininess += LandscapeTexture5to6IsSpecPower.x * input.BlendWeight1.x + LandscapeTexture5to6IsSpecPower.y * input.BlendWeight1.y;
+#else
+    float v_SpecularShininess = SpecularColor.w;
+#endif
 #endif
 
 #if defined(SHADOW_DIR)
@@ -654,12 +746,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
 #if defined(ANISO_LIGHTING)
 #if defined(HAIR)
-        v_SpecularAccumulator = HairAnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
+        v_SpecularAccumulator = HairAnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
 #else
-        v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+        v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
 #endif
 #else
-        v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+        v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 #if defined(PROJECTED_UV) && defined(SNOW)
     }
@@ -706,12 +798,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SPECULAR)
 #if defined(ANISO_LIGHTING)
 #if defined(HAIR)
-        v_SpecularAccumulator += v_lightAttenuation * HairAnisotropicSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
+        v_SpecularAccumulator += v_lightAttenuation * HairAnisotropicSpecular(v_lightDirectionN, v_lightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
 #else
-        v_SpecularAccumulator += v_lightAttenuation * AnisotropicSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+        v_SpecularAccumulator += v_lightAttenuation * AnisotropicSpecular(v_lightDirectionN, v_lightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
 #endif
 #else
-        v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, v_lightColor, SpecularColor.w, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
+        v_SpecularAccumulator += v_lightAttenuation * DirectionalLightSpecular(v_lightDirectionN, v_lightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 #endif
     }
@@ -925,7 +1017,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 #endif
 
+#if defined(MULTI_TEXTURE)
+    output.Color.w = 0;
+#else
     output.Color.w = v_OutAlpha;
+#endif
     output.Color.xyz = v_OutDiffuse - (v_FogDiffuseDiff * FirstPerson * AlphaPass);
 
     if (SSRParams.z > 0.000010)

@@ -15,12 +15,12 @@
 // 11 MultiLayerParallax - #define MULTI_LAYER_PARALLAX, #define ENVMAP
 // 12 Tree - #define TREE_ANIM
 // 13 LODObj - #define LODOBJECTS
-// 14 MultiIndexTriShapeSnow - #define MULTI_INDEX SPARKLE, #define SPARKLE
+// 14 MultiIndexTriShapeSnow - #define MULTI_INDEX, #define SPARKLE
 // 15 LODObjHD - #define LODOBJECTSHD
 // 16 Eye - #define EYE
 // 17 Unknown - Unused (#define CLOUD, #define INSTANCED)
 // 18 LODLandNoise - #define LODLANDSCAPE, #define LODLANDNOISE
-// 19 MTLandLODBlend - #define MULTI_TEXTURE, #define LANDSCAPE LOD_LAND_BLEND
+// 19 MTLandLODBlend - #define MULTI_TEXTURE, #define LANDSCAPE, #define LOD_LAND_BLEND
 
 // flags
 // most flags are unused in VS, reference https://github.com/Nukem9/SkyrimSETest/blob/master/skyrim64_test/src/patches/TES/BSShader/Shaders/BSLightingShader.cpp#L1077
@@ -90,6 +90,18 @@
 
 #if defined(PROJECTED_UV) && defined(FACEGEN)
 #error FACEGEN technique incompatible with PROJECTED_UV flag due to re-use of texture slot
+#endif
+
+#if defined(PROJECTED_UV) && defined(MULTI_TEXTURE)
+#error MULTI_TEXTURE technique incompatible with PROJECTED_UV flag due to re-use of texture slot
+#endif
+
+#if defined(MODELSPACENORMALS) && defined(MULTI_TEXTURE)
+#error MULTI_TEXTURE technique incompatible with MODELSPACENORMALS flag due to re-use of texture slot
+#endif
+
+#if defined(MULTI_TEXTURE) && (defined(SOFT_LIGHTING) || defined(RIM_LIGHTING) || defined(BACK_LIGHTING))
+#error MULTI_TEXTURE technique incompatible with SOFT/RIM/BACK LIGHTING due to re-use of texture slot
 #endif
 
 #if defined(DO_ALPHA_TEST)
