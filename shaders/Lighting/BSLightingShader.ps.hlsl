@@ -3,63 +3,9 @@
 // support technique: NONE, ENVMAP, GLOWMAP, PARALLAX, FACEGEN, FACEGEN_RGB_TINT, HAIR, LODLANDSCAPE, MULTI_LAYER_PARALLAX, TREE_ANIM, LODOBJECTS, LODOBJECTSHD, EYE, LODLANDNOISE
 // support flags: VC, SKINNED, MODELSPACENORMALS, SPECULAR, SOFT_LIGHTING, RIM_LIGHTING, BACK_LIGHTING, SHADOW_DIR, DEFSHADOW, PROJECTED_UV, DEPTH_WRITE_DECALS, ANISO_LIGHTING, AMBIENT_SPECULAR, WORLD_MAP, BASE_OBJECT_IS_SNOW, DO_ALPHA_TEST, SNOW, CHARACTER_LIGHT
 
-#include "Common.h"
-#include "LightingCommon.h"
-
 #if defined(ADDITIONAL_ALPHA_MASK)
 const static float AAM[] = { 0.003922, 0.533333, 0.133333, 0.666667, 0.800000, 0.266667, 0.933333, 0.400000, 0.200000, 0.733333, 0.066667, 0.600000, 0.996078, 0.466667, 0.866667, 0.333333 };
 #endif
-
-// Dynamic buffer: sizeof() = 32 (0x20)
-cbuffer PerTechnique : register(b0)
-{
-    float4 FogColor                              : packoffset(c0);      // @ 0 - 0x0000
-    float4 ColourOutputClamp                     : packoffset(c1);      // @ 4 - 0x0010
-#if defined(DEFSHADOW) || defined(SHADOW_DIR)
-    float4 VPOSOffset                            : packoffset(c2);      // @ 8 - 0x0020
-#endif
-}
-
-// Dynamic buffer: sizeof() = 240 (0xF0)
-cbuffer PerMaterial : register(b1)
-{
-    float4 LODTexParams                          : packoffset(c0);      // @ 0 - 0x0000
-    float4 TintColor                             : packoffset(c1);      // @ 4 - 0x0010
-    float4 EnvmapData                            : packoffset(c2);      // @ 8 - 0x0020
-    float4 ParallaxOccData                       : packoffset(c3);      // @ 12 - 0x0030
-    float4 SpecularColor                         : packoffset(c4);      // @ 16 - 0x0040
-    float4 SparkleParams                         : packoffset(c5);      // @ 20 - 0x0050
-    float4 MultiLayerParallaxData                : packoffset(c6);      // @ 24 - 0x0060
-    float4 LightingEffectParams                  : packoffset(c7);      // @ 28 - 0x0070
-    float4 IBLParams                             : packoffset(c8);      // @ 32 - 0x0080
-    float4 LandscapeTexture1to4IsSnow            : packoffset(c9);      // @ 36 - 0x0090
-    float4 LandscapeTexture5to6IsSnow            : packoffset(c10);     // @ 40 - 0x00A0
-    float4 LandscapeTexture1to4IsSpecPower       : packoffset(c11);     // @ 44 - 0x00B0
-    float4 LandscapeTexture5to6IsSpecPower       : packoffset(c12);     // @ 48 - 0x00C0
-    float4 SnowRimLightParameters                : packoffset(c13);     // @ 52 - 0x00D0
-    float4 CharacterLightParams                  : packoffset(c14);     // @ 56 - 0x00E0
-}
-
-// Dynamic buffer: sizeof() = 480 (0x1E0)
-cbuffer PerGeometry : register(b2)
-{
-    float3 DirLightDirection                     : packoffset(c0);      // @ 0 - 0x0000
-    float3 DirLightColor                         : packoffset(c1);      // @ 4 - 0x0010
-    float4 ShadowLightMaskSelect                 : packoffset(c2);      // @ 8 - 0x0020
-    float4 MaterialData                          : packoffset(c3);      // @ 12 - 0x0030
-    float AlphaTestRef : packoffset(c4);      // @ 16 - 0x0040
-    float3 EmitColor                             : packoffset(c4.y);    // @ 17 - 0x0044
-    float4 ProjectedUVParams                     : packoffset(c6);      // @ 24 - 0x0060
-    float4 SSRParams                             : packoffset(c7);      // @ 28 - 0x0070
-    float4 WorldMapOverlayParametersPS           : packoffset(c8);      // @ 32 - 0x0080
-    float4 ProjectedUVParams2                    : packoffset(c9);      // @ 36 - 0x0090
-    float4 ProjectedUVParams3                    : packoffset(c10);     // @ 40 - 0x00A0
-    row_major float3x4 DirectionalAmbient        : packoffset(c11);     // @ 44 - 0x00B0
-    float4 AmbientSpecularTintAndFresnelPower    : packoffset(c14);     // @ 56 - 0x00E0
-    float4 PointLightPosition[7]                 : packoffset(c15);     // @ 60 - 0x00F0
-    float4 PointLightColor[7]                    : packoffset(c22);     // @ 88 - 0x0160
-    float2 NumLightNumShadowLight                : packoffset(c29);     // @ 116 - 0x01D0
-}
 
 #if !defined(MULTI_TEXTURE)
 SamplerState DiffuseSampler : register(s0);
@@ -172,16 +118,6 @@ Texture2D<float4> TexMTLandTerrainNoiseTexture : register(t15);
 SamplerState ShadowMaskSampler : register(s14);
 Texture2D<float4> TexShadowMaskSampler : register(t14);
 #endif
-
-struct PS_OUTPUT
-{
-    float4 Color                           : SV_Target0;
-    float4 MotionVector                    : SV_Target1;
-    float4 Normal                          : SV_Target2;
-#if defined(SNOW)
-    float4 SnowMask                        : SV_Target3;
-#endif
-};
 
 float3 DirectionalLightDiffuse(float3 a_lightDirectionN, float3 a_lightColor, float3 a_Normal)
 {

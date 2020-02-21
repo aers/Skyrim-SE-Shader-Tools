@@ -1,50 +1,5 @@
 // Skyrim Special Edition - BSLightingShader vertex shader 
 
-#include "Common.h"
-#include "LightingCommon.h"
-
-cbuffer PerTechnique : register(b0)
-{
-    float4 HighDetailRange                       : packoffset(c0);      // @ 0 - 0x0000
-    float4 FogParam                              : packoffset(c1);      // @ 4 - 0x0010
-    float4 FogNearColor                          : packoffset(c2);      // @ 8 - 0x0020
-    float4 FogFarColor                           : packoffset(c3);      // @ 12 - 0x0030
-}
-
-cbuffer PerMaterial : register(b1)
-{
-    float3 LeftEyeCenter                         : packoffset(c0);      // @ 0 - 0x0000
-    float3 RightEyeCenter                        : packoffset(c1);      // @ 4 - 0x0010
-    float4 TexCoordOffset                        : packoffset(c2);      // @ 8 - 0x0020
-}
-
-cbuffer PerGeometry : register(b2)
-{
-    row_major float3x4 World                     : packoffset(c0);      // @ 0 - 0x0000
-    row_major float3x4 PreviousWorld             : packoffset(c3);      // @ 12 - 0x0030
-    float3 EyePosition                           : packoffset(c6);      // @ 24 - 0x0060
-    float4 LandBlendParams                       : packoffset(c7);      // @ 28 - 0x0070
-    float4 TreeParams                            : packoffset(c8);      // @ 32 - 0x0080
-    float2 WindTimers                            : packoffset(c9);      // @ 36 - 0x0090
-    row_major float3x4 TextureProj               : packoffset(c10);     // @ 40 - 0x00A0
-    float IndexScale : packoffset(c13);     // @ 52 - 0x00D0
-    float4 WorldMapOverlayParameters             : packoffset(c14);     // @ 56 - 0x00E0
-}
-
-#if defined(SKINNED)
-// these are world transform matrices for up to 80 bones
-// cb9 - prev bones
-cbuffer PreviousBones : register(b9)
-{
-    float4 PreviousBones[240];
-}
-// cb10 - bones
-cbuffer Bones : register(b10)
-{
-    float4 Bones[240];
-}
-#endif
-
 // from FO4 EffectMAX.fx
 float4 GetFog(float3 apPosition, float afNearInverseFarMinusNear, float afInverseFarMinusNear, float afPower, float afClamp, float3 NearColor, float3 FarColor)
 {
@@ -72,30 +27,6 @@ float GetTreeDisplacement(float3 apVertexPosition, float4 aTreeParams, float afW
 
     return displacementScale;
 }
-
-struct VS_INPUT
-{
-    precise float4 VertexPos            : POSITION0;
-    float2 TexCoords                    : TEXCOORD0;
-#if !defined(MODELSPACENORMALS)
-    float4 Normal                       : NORMAL0;
-    float4 Binormal                     : BINORMAL0;
-#endif
-#if defined(VC)
-    float4 VertexColor                  : COLOR0;
-#endif
-#if defined(MULTI_TEXTURE)
-    float4 BlendWeight0                 : TEXCOORD2;
-    float4 BlendWeight1                 : TEXCOORD3;
-#endif
-#if defined(SKINNED)
-    float4 BoneWeights                  : BLENDWEIGHT0;
-    float4 BoneIndices                  : BLENDINDICES0;
-#endif
-#if defined(EYE)
-    float IsRightEye : TEXCOORD2;
-#endif
-};
 
 VS_OUTPUT VSMain(VS_INPUT input)
 {

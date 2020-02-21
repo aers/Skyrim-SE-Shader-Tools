@@ -44,66 +44,6 @@
 // 1<<22 (None) - #define CHARACTER_LIGHT
 // 1<<23 (Aam) - #define ADDITIONAL_ALPHA_MASK
 
-// note: in the game's renderer PARALLAX, PARALLAXOCC, FACEGEN, and FACEGEN_RGB_TINT do not update the eye (view) position so this output will be wrong unless specular is also enabled
-// in vertex shader RIM_LIGHTING and AMBIENT_SPECULAR force SPECULAR flag, creating the view direction vector, even though those flags aren't used to generate vertex shader combinations
-#if defined(SPECULAR) || defined(RIM_LIGHTING) || defined(AMBIENT_SPECULAR) || defined(ENVMAP) || defined(PARALLAX) || defined(PARALLAX_OCC) || defined(FACEGEN) || defined(FACEGEN_RGB_TINT) || defined(MULTILAYERPARALLAX) || defined(EYE)
-#define HAS_VIEW_DIRECTION_VECTOR_OUTPUT
-#endif
-
-#if defined(SKINNED) || defined(ENVMAP) || defined(EYE) || defined(MULTILAYERPARALLAX)
-#define DRAW_IN_WORLDSPACE
-#endif
-
-// this transform is primarly used to take normals into common space
-// since common space is model space by default, its not present if there are model space normals and the shader is not drawing in world space
-#if defined(DRAW_IN_WORLDSPACE) || !defined(MODELSPACENORMALS)
-#define HAS_COMMON_TRANSFORM
-#endif
-
-#if defined(MODELSPACENORMALS) && defined(ANISO_LIGHTING)
-#error ANISO_LIGHTING cannot be used with MODELSPACENORMALS as it requires vertex normals
-#endif
-
-//#if defined(DEPTH_WRITE_DECALS) && !defined(DO_ALPHA_TEST)
-//#error DEPTH_WRITE_DECALS is an extension of DO_ALPHA_TEST and requires that flag to be set
-//#endif
-
-#if defined(DEPTH_WRITE_DECALS) && !defined(HAIR)
-#error DEPTH_WRITE_DECALS is for the HAIR technique only
-#endif
-
-#if defined(PROJECTED_UV) && defined(PARALLAX)
-#error PARALLAX technique incompatible with PROJECTED_UV flag due to re-use of texture slot
-#endif
-
-#if defined(MODELSPACENORMALS) && defined(PARALLAX)
-#error PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
-#endif
-
-#if defined(MODELSPACENORMALS) && defined(MULTI_LAYER_PARALLAX)
-#error MULTI_LAYER_PARALLAX technique incompatible with MODELSPACENORMALS because there is no matrix to convert to tangent space
-#endif
-
-#if defined(PROJECTED_UV) && defined(MULTI_LAYER_PARALLAX)
-#error MULTI_LAYER_PARALLAX technique incomptaible with PROJECTED_UV flag due to re-use of texture slot
-#endif
-
-#if defined(PROJECTED_UV) && defined(FACEGEN)
-#error FACEGEN technique incompatible with PROJECTED_UV flag due to re-use of texture slot
-#endif
-
-#if defined(PROJECTED_UV) && defined(MULTI_TEXTURE)
-#error MULTI_TEXTURE technique incompatible with PROJECTED_UV flag due to re-use of texture slot
-#endif
-
-#if defined(MODELSPACENORMALS) && defined(MULTI_TEXTURE)
-#error MULTI_TEXTURE technique incompatible with MODELSPACENORMALS flag due to re-use of texture slot
-#endif
-
-#if defined(MULTI_TEXTURE) && (defined(SOFT_LIGHTING) || defined(RIM_LIGHTING) || defined(BACK_LIGHTING))
-#error MULTI_TEXTURE technique incompatible with SOFT/RIM/BACK LIGHTING due to re-use of texture slot
-#endif
-
 #if defined(DO_ALPHA_TEST)
 cbuffer AlphaTestRefCB : register(b11)
 {
