@@ -644,14 +644,14 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_VertexColor = input.VertexColor.xyz;
 #endif
 
-    // TODO - refactor defines
+    // i've duplicated a bunch of code in these defines in order to increase readability
+    // SNOW-related specular lighting
 #if defined(SNOW)
-    // snow rim lighting
     float v_SnowRimLight = 0.0;
+
 #if defined(PROJECTED_UV)
     if (v_ProjUVDoSnowRim != 0)
     {
-#endif
         // bEnableSnowRimLighting
         if (SnowRimLightParameters.w > 0.0)
         {
@@ -671,15 +671,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
             v_SpecularAccumulator.xyz = v_SnowRimLight.xxx;
 #endif
         }
-#if defined(PROJECTED_UV)
     }
-#endif
-#endif
-#if defined(SPECULAR) && (!defined(SNOW) || defined(PROJECTED_UV))
-#if defined(PROJECTED_UV) && defined(SNOW)
+#if defined(SPECULAR)
     else
     {
-#endif
 #if defined(ANISO_LIGHTING)
 #if defined(HAIR)
         v_SpecularAccumulator = HairAnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
@@ -689,8 +684,43 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #else
         v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
-#if defined(PROJECTED_UV) && defined(SNOW)
     }
+#endif 
+
+#else  // !defined(PROJECTED_UV)
+    // bEnableSnowRimLighting
+    if (SnowRimLightParameters.w > 0.0)
+    {
+        float v_SnowRimLightIntensity = SnowRimLightParameters.x;
+        float v_SnowGeometrySpecPower = SnowRimLightParameters.y;
+        float v_SnowNormalSpecPower = SnowRimLightParameters.z;
+
+        float v_SnowRim_Normal = pow(1 - saturate(dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz)), v_SnowNormalSpecPower);
+#if defined(MODELSPACENORMALS)
+        float v_SnowRim_Geometry = pow(1 - saturate(v_ViewDirectionVec.z), v_SnowGeometrySpecPower);
+#else
+        float v_SnowRim_Geometry = pow(1 - saturate(dot(v_VertexNormalN.xyz, v_ViewDirectionVec.xyz)), v_SnowGeometrySpecPower);
+#endif
+        v_SnowRimLight = v_SnowRim_Normal * v_SnowRim_Geometry * v_SnowRimLightIntensity;
+
+#if defined(SPECULAR)
+        v_SpecularAccumulator.xyz = v_SnowRimLight.xxx;
+#endif
+    }
+#endif // end if defined(PROJECTED_UV) else
+
+#endif // end if defined(SNOW)
+
+    // non-SNOW related specular lighting
+#if defined(SPECULAR) && !defined(SNOW)
+#if defined(ANISO_LIGHTING)
+#if defined(HAIR)
+    v_SpecularAccumulator = HairAnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal, v_VertexBitangent, v_VertexColor);
+#else
+    v_SpecularAccumulator = AnisotropicSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz, v_VertexNormal);
+#endif
+#else
+    v_SpecularAccumulator = DirectionalLightSpecular(DirLightDirection.xyz, v_DirLightColor, v_SpecularShininess, v_ViewDirectionVec, v_CommonSpaceNormal.xyz);
 #endif
 #endif
 
