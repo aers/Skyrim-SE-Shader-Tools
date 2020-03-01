@@ -239,48 +239,211 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(MULTI_TEXTURE)
 #if defined(SNOW)
     float v_bEnableSnowMask = LandscapeTexture5to6IsSnow.z;
+    float v_iLandscapeMultiNormalTilingFactor = LandscapeTexture5to6IsSnow.w;
+    float v_NormalIsTiled = v_iLandscapeMultiNormalTilingFactor != 1.000000;
+    float2 v_TiledCoords = v_TexCoords.xy * v_iLandscapeMultiNormalTilingFactor;
+#endif
+
     float4 v_DiffuseBase = TexMTLandDiffuseBase.Sample(MTLandDiffuseBase, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
-    // if bEnableSnowMask = 1, this = v_DiffuseBase.w
-    // implemented as lerp
+    // if bEnableSnowMask = 1, this = v_DiffuseBase.w, which is the snow mask channel of the texture
     float v_DiffuseBaseIsSnow = lerp(1, v_DiffuseBase.w, v_EnableSnowMask);
-#else
-    // this generates different code than their version probably because the SNOW code is interweaved within, but I made it separate so :shrug:
-    float3 v_DiffuseBase = TexMTLandDiffuseBase.Sample(MTLandDiffuseBase, v_TexCoords.xy).xyz;
-    float3 v_DiffuseLayer1 = TexMTLandDiffuse1.Sample(MTLandDiffuse1, v_TexCoords.xy).xyz;
-    float3 v_DiffuseLayer2 = TexMTLandDiffuse2.Sample(MTLandDiffuse2, v_TexCoords.xy).xyz;
-    float3 v_DiffuseLayer3 = TexMTLandDiffuse3.Sample(MTLandDiffuse3, v_TexCoords.xy).xyz;
-    float3 v_DiffuseLayer4 = TexMTLandDiffuse4.Sample(MTLandDiffuse4, v_TexCoords.xy).xyz;
-    float3 v_DiffuseLayer5 = TexMTLandDiffuse5.Sample(MTLandDiffuse5, v_TexCoords.xy).xyz;
+#endif
 
     float4 v_NormalBase = TexMTLandNormalBase.Sample(MTLandNormalBase, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_DiffuseBaseIsSnow > 0.0)
+    {
+        float3 v_NormalBaseTiled = TexMTLandNormalBase.Sample(MTLandNormalBase, v_TiledCoords.xy).xyz;
+        v_NormalBaseTiled = v_NormalBaseTiled * 2 - 1;
+        float v_TiledFactor = v_NormalBase.z * 2;
+        v_NormalBase.xyz = v_NormalBase.xyz * 2 - float3(1, 1, 0);
+        v_NormalBaseTiled = v_NormalBaseTiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_NormalBase.xyz, v_NormalBaseTiled);
+
+        v_NormalBase.xyz = normalize(v_NormalBase.xyz * v_UntiledFactor - v_NormalBaseTiled * v_TiledFactor);
+    }
+    else
+    {
+        v_NormalBase.xyz = v_NormalBase.xyz * 2 - 1;
+    }
+#else
     v_NormalBase.xyz = v_NormalBase.xyz * 2 - 1;
-    float4 v_NormalLayer1 = TexMTLandNormal1.Sample(MTLandNormal1, v_TexCoords.xy).xyzw;
-    v_NormalLayer1.xyz = v_NormalLayer1.xyz * 2 - 1;
-    float4 v_NormalLayer2 = TexMTLandNormal2.Sample(MTLandNormal2, v_TexCoords.xy).xyzw;
-    v_NormalLayer2.xyz = v_NormalLayer2.xyz * 2 - 1;
-    float4 v_NormalLayer3 = TexMTLandNormal3.Sample(MTLandNormal3, v_TexCoords.xy).xyzw;
-    v_NormalLayer3.xyz = v_NormalLayer3.xyz * 2 - 1;
-    float4 v_NormalLayer4 = TexMTLandNormal4.Sample(MTLandNormal4, v_TexCoords.xy).xyzw;
-    v_NormalLayer4.xyz = v_NormalLayer4.xyz * 2 - 1;
-    float4 v_NormalLayer5 = TexMTLandNormal5.Sample(MTLandNormal5, v_TexCoords.xy).xyzw;
-    v_NormalLayer5.xyz = v_NormalLayer5.xyz * 2 - 1;
+#endif
+
+    float4 v_Diffuse1 = TexMTLandDiffuse1.Sample(MTLandDiffuse1, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_Diffuse1.w, which is the snow mask channel of the texture
+    float v_Diffuse1IsSnow = lerp(1, v_Diffuse1.w, v_EnableSnowMask);
+#endif
+
+    float4 v_Normal1 = TexMTLandNormal1.Sample(MTLandNormal1, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_Diffuse1IsSnow > 0.0)
+    {
+        float3 v_Normal1Tiled = TexMTLandNormal1.Sample(MTLandNormal1, v_TiledCoords.xy).xyz;
+        v_Normal1Tiled = v_Normal1Tiled * 2 - 1;
+        float v_TiledFactor = v_Normal1.z * 2;
+        v_Normal1.xyz = v_Normal1.xyz * 2 - float3(1, 1, 0);
+        v_Normal1Tiled = v_Normal1Tiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_Normal1.xyz, v_Normal1Tiled);
+
+        v_Normal1.xyz = normalize(v_Normal1.xyz * v_UntiledFactor - v_Normal1Tiled * v_TiledFactor);
+    }
+    else
+    {
+        v_Normal1.xyz = v_Normal1.xyz * 2 - 1;
+    }
+#else
+    v_Normal1.xyz = v_Normal1.xyz * 2 - 1;
+#endif
+
+    float4 v_Diffuse2 = TexMTLandDiffuse2.Sample(MTLandDiffuse2, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_Diffuse2.w, which is the snow mask channel of the texture
+    float v_Diffuse2IsSnow = lerp(1, v_Diffuse2.w, v_EnableSnowMask);
+#endif
+
+    float4 v_Normal2 = TexMTLandNormal2.Sample(MTLandNormal2, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_Diffuse2IsSnow > 0.0)
+    {
+        float3 v_Normal2Tiled = TexMTLandNormal2.Sample(MTLandNormal2, v_TiledCoords.xy).xyz;
+        v_Normal2Tiled = v_Normal2Tiled * 2 - 1;
+        float v_TiledFactor = v_Normal2.z * 2;
+        v_Normal2.xyz = v_Normal2.xyz * 2 - float3(1, 1, 0);
+        v_Normal2Tiled = v_Normal2Tiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_Normal2.xyz, v_Normal2Tiled);
+
+        v_Normal2.xyz = normalize(v_Normal2.xyz * v_UntiledFactor - v_Normal2Tiled * v_TiledFactor);
+    }
+    else
+    {
+        v_Normal2.xyz = v_Normal2.xyz * 2 - 1;
+    }
+#else
+    v_Normal2.xyz = v_Normal2.xyz * 2 - 1;
+#endif
+
+    float4 v_Diffuse3 = TexMTLandDiffuse3.Sample(MTLandDiffuse3, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_Diffuse3.w, which is the snow mask channel of the texture
+    float v_Diffuse3IsSnow = lerp(1, v_Diffuse3.w, v_EnableSnowMask);
+#endif
+
+    float4 v_Normal3 = TexMTLandNormal3.Sample(MTLandNormal3, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_Diffuse3IsSnow > 0.0)
+    {
+        float3 v_Normal3Tiled = TexMTLandNormal3.Sample(MTLandNormal3, v_TiledCoords.xy).xyz;
+        v_Normal3Tiled = v_Normal3Tiled * 2 - 1;
+        float v_TiledFactor = v_Normal3.z * 2;
+        v_Normal3.xyz = v_Normal3.xyz * 2 - float3(1, 1, 0);
+        v_Normal3Tiled = v_Normal3Tiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_Normal3.xyz, v_Normal3Tiled);
+
+        v_Normal3.xyz = normalize(v_Normal3.xyz * v_UntiledFactor - v_Normal3Tiled * v_TiledFactor);
+    }
+    else
+    {
+        v_Normal3.xyz = v_Normal3.xyz * 2 - 1;
+    }
+#else
+    v_Normal3.xyz = v_Normal3.xyz * 2 - 1;
+#endif
+
+    float4 v_Diffuse4 = TexMTLandDiffuse4.Sample(MTLandDiffuse4, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_Diffuse4.w, which is the snow mask channel of the texture
+    float v_Diffuse4IsSnow = lerp(1, v_Diffuse4.w, v_EnableSnowMask);
+#endif
+
+    float4 v_Normal4 = TexMTLandNormal4.Sample(MTLandNormal4, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_Diffuse4IsSnow > 0.0)
+    {
+        float3 v_Normal4Tiled = TexMTLandNormal4.Sample(MTLandNormal4, v_TiledCoords.xy).xyz;
+        v_Normal4Tiled = v_Normal4Tiled * 2 - 1;
+        float v_TiledFactor = v_Normal4.z * 2;
+        v_Normal4.xyz = v_Normal4.xyz * 2 - float3(1, 1, 0);
+        v_Normal4Tiled = v_Normal4Tiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_Normal4.xyz, v_Normal4Tiled);
+
+        v_Normal4.xyz = normalize(v_Normal4.xyz * v_UntiledFactor - v_Normal4Tiled * v_TiledFactor);
+    }
+    else
+    {
+        v_Normal4.xyz = v_Normal4.xyz * 2 - 1;
+    }
+#else
+    v_Normal4.xyz = v_Normal4.xyz * 2 - 1;
+#endif
+
+    float4 v_Diffuse5 = TexMTLandDiffuse5.Sample(MTLandDiffuse5, v_TexCoords.xy).xyzw;
+#if defined(SNOW)
+    // if bEnableSnowMask = 0, this = 1
+    // if bEnableSnowMask = 1, this = v_Diffuse5.w, which is the snow mask channel of the texture
+    float v_Diffuse5IsSnow = lerp(1, v_Diffuse5.w, v_EnableSnowMask);
+#endif
+
+    float4 v_Normal5 = TexMTLandNormal5.Sample(MTLandNormal5, v_TexCoords.xy).xyzw;
+
+#if defined(SNOW)
+    if (v_NormalIsTiled && v_Diffuse5IsSnow > 0.0)
+    {
+        float3 v_Normal5Tiled = TexMTLandNormal5.Sample(MTLandNormal5, v_TiledCoords.xy).xyz;
+        v_Normal5Tiled = v_Normal5Tiled * 2 - 1;
+        float v_TiledFactor = v_Normal5.z * 2;
+        v_Normal5.xyz = v_Normal5.xyz * 2 - float3(1, 1, 0);
+        v_Normal5Tiled = v_Normal5Tiled * float3(-1, -1, 0);
+        float v_UntiledFactor = dot(v_Normal5.xyz, v_Normal5Tiled);
+
+        v_Normal5.xyz = normalize(v_Normal5.xyz * v_UntiledFactor - v_Normal5Tiled * v_TiledFactor);
+    }
+    else
+    {
+        v_Normal5.xyz = v_Normal5.xyz * 2 - 1;
+    }
+#else
+    v_Normal5.xyz = v_Normal5.xyz * 2 - 1;
+#endif
 
     float4 v_Diffuse = float4(  
         v_DiffuseBase.xyz * input.BlendWeight0.x
-        + v_DiffuseLayer1.xyz * input.BlendWeight0.y
-        + v_DiffuseLayer2.xyz * input.BlendWeight0.z
-        + v_DiffuseLayer3.xyz * input.BlendWeight0.w
-        + v_DiffuseLayer4.xyz * input.BlendWeight1.x
-        + v_DiffuseLayer5.xyz * input.BlendWeight1.y,
+        + v_Diffuse1.xyz * input.BlendWeight0.y
+        + v_Diffuse2.xyz * input.BlendWeight0.z
+        + v_Diffuse3.xyz * input.BlendWeight0.w
+        + v_Diffuse4.xyz * input.BlendWeight1.x
+        + v_Diffuse5.xyz * input.BlendWeight1.y,
         0);
 
     float4 v_Normal = v_NormalBase.xyzw * input.BlendWeight0.x
-        + v_NormalLayer1.xyzw * input.BlendWeight0.y
-        + v_NormalLayer2.xyzw * input.BlendWeight0.z
-        + v_NormalLayer3.xyzw * input.BlendWeight0.w
-        + v_NormalLayer4.xyzw * input.BlendWeight1.x
-        + v_NormalLayer5.xyzw * input.BlendWeight1.y;
+        + v_Normal1.xyzw * input.BlendWeight0.y
+        + v_Normal2.xyzw * input.BlendWeight0.z
+        + v_Normal3.xyzw * input.BlendWeight0.w
+        + v_Normal4.xyzw * input.BlendWeight1.x
+        + v_Normal5.xyzw * input.BlendWeight1.y;
+
+#if defined(SNOW)
+    float4 v_SnowBlendFactors1to4 = LandscapeTexture1to4IsSnow.xyzw * input.BlendWeight0.xyzw;
+    float2 v_SnowBlendFactors5to6 = LandscapeTexture5to6IsSnow.xy * input.BlendWeight1.xy;
+
+    float v_MTLandDoSnowRim = v_DiffuseBaseIsSnow * v_SnowBlendFactors1to4.x +
+        v_Diffuse1IsSnow * v_SnowBlendFactors1to4.y +
+        v_Diffuse2IsSnow * v_SnowBlendFactors1to4.z +
+        v_Diffuse3IsSnow * v_SnowBlendFactors1to4.w +
+        v_Diffuse4IsSnow * v_SnowBlendFactors5to6.x +
+        v_Diffuse5IsSnow * v_SnowBlendFactors5to6.y;
 #endif
 #else
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
@@ -648,8 +811,26 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // SNOW-related specular lighting
 #if defined(SNOW)
     float v_SnowRimLight = 0.0;
+#if defined(MULTI_TEXTURE)
+    if (v_MTLandDoSnowRim != 0)
+    {
+        // bEnableSnowRimLighting
+        if (SnowRimLightParameters.w > 0.0)
+        {
+            float v_SnowRimLightIntensity = SnowRimLightParameters.x;
+            float v_SnowGeometrySpecPower = SnowRimLightParameters.y;
+            float v_SnowNormalSpecPower = SnowRimLightParameters.z;
 
-#if defined(PROJECTED_UV)
+            float v_SnowRim_Normal = pow(1 - saturate(dot(v_CommonSpaceNormal.xyz, v_ViewDirectionVec.xyz)), v_SnowNormalSpecPower);
+            float v_SnowRim_Geometry = pow(1 - saturate(dot(v_VertexNormalN.xyz, v_ViewDirectionVec.xyz)), v_SnowGeometrySpecPower);
+
+            v_SnowRimLight = v_SnowRim_Normal * v_SnowRim_Geometry * v_SnowRimLightIntensity;
+#if defined(SPECULAR)
+            v_SpecularAccumulator.xyz = v_SnowRimLight.xxx;
+#endif
+        }
+    }
+#elif defined(PROJECTED_UV)
     if (v_ProjUVDoSnowRim != 0)
     {
         // bEnableSnowRimLighting
@@ -687,7 +868,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 #endif 
 
-#else  // !defined(PROJECTED_UV)
+#else  // !defined(PROJECTED_UV) && !defined(MULTI_TEXTURE)
     // bEnableSnowRimLighting
     if (SnowRimLightParameters.w > 0.0)
     {
@@ -873,7 +1054,16 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SPECULAR) 
     float3 v_OutSpecular;
     float v_SpecularLODFade = MaterialData.y;
-#if defined(PROJECTED_UV) && defined(SNOW)
+#if defined(MULTI_TEXTURE) && defined(SNOW)
+    if (v_MTLandDoSnowRim != 0)
+    {
+        v_OutSpecular = float3(0, 0, 0);
+    }
+    else
+    {
+        v_OutSpecular = v_SpecularAccumulator.xyz * v_SpecularPower * v_SpecularLODFade;
+    }
+#elif defined(PROJECTED_UV) && defined(SNOW)
     if (v_ProjUVDoSnowRim != 0)
     {
         v_OutSpecular = float3(0, 0, 0);
