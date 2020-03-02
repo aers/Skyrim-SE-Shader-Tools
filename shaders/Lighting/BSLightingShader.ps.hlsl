@@ -445,6 +445,20 @@ PS_OUTPUT PSMain(PS_INPUT input)
         v_Diffuse4IsSnow * v_SnowBlendFactors5to6.x +
         v_Diffuse5IsSnow * v_SnowBlendFactors5to6.y;
 #endif
+
+    // this code is nearly identical to the LODLANDNOISE code later on
+#if defined(LOD_LAND_BLEND)
+    float4 v_TerrainOverlay = TexMTLandTerrainOverlayTexture.Sample(MTLandTerrainOverlayTexture, input.TexCoords.zw).xyzw;
+    float v_LODBlendFactor = 0.800 * smoothstep(0.4, 1.0, dot(v_TerrainOverlay.xyz, float3(0.550000, 0.550000, 0.550000)));
+    float2 v_NoiseCoords = input.TexCoords.zw * 3;
+    float v_TexNoise = TexMTLandTerrainNoiseTexture.Sample(MTLandTerrainNoiseTexture, v_NoiseCoords).x;
+    float v_Noise = lerp(v_TexNoise, 0.370000, v_LODBlendFactor) * 0.833333 + 0.370000;
+    float v_LandLODBlendFactor = input.BlendWeight1.w * LODTexParams.z; // LODTexParams.z is either 0 or 1
+    v_Diffuse = lerp(v_Diffuse, v_TerrainOverlay * v_Noise, v_LandLODBlendFactor);
+    v_Normal.xyz = lerp(v_Normal.xyz, float3(0, 0, 1), v_LandLODBlendFactor);
+    // note: specular power
+    v_Normal.w = v_Normal.w - v_Normal.w * v_LandLODBlendFactor;
+#endif
 #else
     float4 v_Diffuse = TexDiffuseSampler.Sample(DiffuseSampler, v_TexCoords.xy).xyzw;
 
@@ -1173,7 +1187,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     }
 #endif
 
-#if defined(MULTI_TEXTURE)
+#if defined(MULTI_TEXTURE) && !defined(LOD_LAND_BLEND)
     output.Color.w = 0;
 #else
     output.Color.w = v_OutAlpha;

@@ -25,6 +25,6 @@ most have been briefly tested. can't possibly test every combination.
 + LODOBJECTSHD - complete
 + EYE - complete but untested
 + LODLANDSCAPE, LODLANDNOISE - complete
-+ MULTI_TEXTURE, LANDSCAPE, LAND_LOD_BLEND (MTLandLODBlend) - unimplemented, 18 total combinations
++ MULTI_TEXTURE, LANDSCAPE, LAND_LOD_BLEND (MTLandLODBlend) - complete but untested
 
-6744/6924 - 97.4%
+6780/6924 - 97.9%
