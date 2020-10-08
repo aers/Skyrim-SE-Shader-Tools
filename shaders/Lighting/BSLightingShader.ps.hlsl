@@ -248,7 +248,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_DiffuseBase.w, which is the snow mask channel of the texture
-    float v_DiffuseBaseIsSnow = lerp(1, v_DiffuseBase.w, v_EnableSnowMask);
+    float v_DiffuseBaseIsSnow = lerp(1, v_DiffuseBase.w, v_bEnableSnowMask);
 #endif
 
     float4 v_NormalBase = TexMTLandNormalBase.Sample(MTLandNormalBase, v_TexCoords.xy).xyzw;
@@ -277,7 +277,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_Diffuse1.w, which is the snow mask channel of the texture
-    float v_Diffuse1IsSnow = lerp(1, v_Diffuse1.w, v_EnableSnowMask);
+    float v_Diffuse1IsSnow = lerp(1, v_Diffuse1.w, v_bEnableSnowMask);
 #endif
 
     float4 v_Normal1 = TexMTLandNormal1.Sample(MTLandNormal1, v_TexCoords.xy).xyzw;
@@ -306,7 +306,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_Diffuse2.w, which is the snow mask channel of the texture
-    float v_Diffuse2IsSnow = lerp(1, v_Diffuse2.w, v_EnableSnowMask);
+    float v_Diffuse2IsSnow = lerp(1, v_Diffuse2.w, v_bEnableSnowMask);
 #endif
 
     float4 v_Normal2 = TexMTLandNormal2.Sample(MTLandNormal2, v_TexCoords.xy).xyzw;
@@ -335,7 +335,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_Diffuse3.w, which is the snow mask channel of the texture
-    float v_Diffuse3IsSnow = lerp(1, v_Diffuse3.w, v_EnableSnowMask);
+    float v_Diffuse3IsSnow = lerp(1, v_Diffuse3.w, v_bEnableSnowMask);
 #endif
 
     float4 v_Normal3 = TexMTLandNormal3.Sample(MTLandNormal3, v_TexCoords.xy).xyzw;
@@ -364,7 +364,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_Diffuse4.w, which is the snow mask channel of the texture
-    float v_Diffuse4IsSnow = lerp(1, v_Diffuse4.w, v_EnableSnowMask);
+    float v_Diffuse4IsSnow = lerp(1, v_Diffuse4.w, v_bEnableSnowMask);
 #endif
 
     float4 v_Normal4 = TexMTLandNormal4.Sample(MTLandNormal4, v_TexCoords.xy).xyzw;
@@ -393,7 +393,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(SNOW)
     // if bEnableSnowMask = 0, this = 1
     // if bEnableSnowMask = 1, this = v_Diffuse5.w, which is the snow mask channel of the texture
-    float v_Diffuse5IsSnow = lerp(1, v_Diffuse5.w, v_EnableSnowMask);
+    float v_Diffuse5IsSnow = lerp(1, v_Diffuse5.w, v_bEnableSnowMask);
 #endif
 
     float4 v_Normal5 = TexMTLandNormal5.Sample(MTLandNormal5, v_TexCoords.xy).xyzw;
