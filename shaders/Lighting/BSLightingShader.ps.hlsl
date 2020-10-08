@@ -1094,8 +1094,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // motion vector
     float2 v_CurrProjPosition = float2(
         dot(ViewProjMatrixUnjittered[0].xyzw, input.WorldVertexPos.xyzw),
-        dot(ViewProjMatrixUnjittered[1].xyzw, input.WorldVertexPos.xyzw)) 
-        / dot(ViewProjMatrixUnjittered[3].xyzw, input.WorldVertexPos.xyzw);
+        dot(ViewProjMatrixUnjittered[1].xyzw, input.WorldVertexPos.xyzw))
+    / dot(ViewProjMatrixUnjittered[3].xyzw, input.WorldVertexPos.xyzw);
     float2 v_PrevProjPosition = float2(
         dot(PreviousViewProjMatrixUnjittered[0].xyzw, input.PreviousWorldVertexPos.xyzw),
         dot(PreviousViewProjMatrixUnjittered[1].xyzw, input.PreviousWorldVertexPos.xyzw))
@@ -1115,20 +1115,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 v_AmbientSpecular = v_AmbientSpecularColor * v_AmbientSpecularIntensity;
 #endif
 
-    // FirstPerson seems to be 1 regardless of 1st/3rd person in SE, could be LE legacy code or a bug
-    // AlphaPass is 0 before the fog imagespace shader runs and 1 after
-    float FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
-    float AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z;
-
-    // fog
-    // SE implements fog as an imagespace shader after the main lighting pass so this is wasted on 95%~ of lighting shader runs
-    // this code is probably actually completely different then this, its just what it compiled to, needs refactor probably
-    float v_FogAmount = input.FogParam.w;
-    float3 v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
-    float3 v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
-
     // ColorOutputClamp.x = fLightingOutputColourClampPostLit
-    v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.x);
+    v_OutDiffuse = min(v_OutDiffuse, ColourOutputClamp.x);
 
 #if defined(SPECULAR) || defined(AMBIENT_SPECULAR)
 #if defined(SPECULAR) && (!defined(SNOW) || defined(PROJECTED_UV))
@@ -1137,12 +1125,22 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #if defined(AMBIENT_SPECULAR)
     v_OutDiffuse += v_AmbientSpecular;
 #endif
-    v_FogDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount);
-    v_FogDiffuseDiff = v_OutDiffuse - v_FogDiffuse * FogColor.w;
-
     // ColourOutputClamp.z = fLightingOutputColourClampPostSpec
-    v_OutDiffuse = min(v_OutDiffuse, v_FogDiffuseDiff * FirstPerson + ColourOutputClamp.z);
+    v_OutDiffuse = min(v_OutDiffuse, ColourOutputClamp.z);
 #endif
+
+	// fog
+	// note that this code does NOT match Bethesda's but is probably what was intended, can't be sure though
+	// the diassembled shaders have a mess of code where the above clamping is mixed with the fog in a way that doesn't make much sense
+	
+	// SE implements fog as an imagespace shader that runs after most passes of the lighting shader
+    // AlphaPass and FirstPerson both act to turn the fog on/off in the lighting shader	
+    float FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y; // 0.0 if rendering first person body, 1.0 otherwise
+    float AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z; // 0.0 for the majority of BSLightingShader render passes, 1.0 for passes after the fog imagespace shader(?) haven't verified
+	
+    float v_EnableFogInLightingShader = FirstPerson * AlphaPass;
+	
+    float3 v_FoggedDiffuse = lerp(v_OutDiffuse, input.FogParam.xyz, v_FogAmount) * FogColor.w;
 
 #if defined(ADDITIONAL_ALPHA_MASK)
     uint2 v_ProjVertexPosTrunc = (uint2) input.ProjVertexPos.xy;
@@ -1192,7 +1190,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #else
     output.Color.w = v_OutAlpha;
 #endif
-    output.Color.xyz = v_OutDiffuse - (v_FogDiffuseDiff * FirstPerson * AlphaPass);
+    output.Color.xyz = lerp(v_OutDiffuse, v_FoggedDiffuse, v_EnableFogInLightingShader);
 
     if (SSRParams.z > 0.000010)
     {
