@@ -1,11 +1,3 @@
-#define PIXELSHADER
-
-#define SPECULAR
-#define MODELSPACENORMALS
-#define SOFT_LIGHTING
-#define RIM_LIGHTING
-#define BACK_LIGHTING
-
 // BSLightingShader - Default Technique (ID 0)
 
 // Supported Flags
@@ -21,6 +13,8 @@
 #include "include/ConstantBuffers.hlsli"
 #include "include/InputOutput.hlsli"
 #include "include/Samplers.hlsli"
+
+#if defined(PIXELSHADER)
 
 #include "include/Lighting.hlsl"
 
@@ -127,7 +121,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
         
 #if defined(BACK_LIGHTING)
-        diffuseLighting += BackLighting(lightDirection, lightColour, backlightingMaskSample, commonSpaceNormal.xyz);
+        lightDiffuseLighting += BackLighting(lightDirection, lightColour, backlightingMaskSample, commonSpaceNormal.xyz);
 #endif
         
         diffuseLighting += lightAttenuation * lightDiffuseLighting;
@@ -225,3 +219,5 @@ PS_OUTPUT PSMain(PS_INPUT input)
     
     return output;
 }
+
+#endif
