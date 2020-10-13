@@ -1,0 +1,59 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{e487ea2f-dbf7-49c6-bd70-00519f35c76c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders">
+      <UniqueIdentifier>{f56fc6ac-f5f1-4f5e-bcb2-7a5c4b593e74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders\BSLightingShader">
+      <UniqueIdentifier>{15412fe4-7322-40e6-a53d-12b2befa3869}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="shaders\BSLightingShader\include">
+      <UniqueIdentifier>{d8715b2a-5977-40a8-8ef1-60338a30d25a}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\PCH.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\PCH.h">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="src\version.h">
+      <Filter>src</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".clang-format" />
+    <None Include="shaders\BSLightingShader\include\CommonDefines.hlsli">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </None>
+    <None Include="shaders\BSLightingShader\include\ConstantBuffers.hlsli">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </None>
+    <None Include="shaders\BSLightingShader\include\InputOutput.hlsli">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </None>
+    <None Include="shaders\BSLightingShader\include\Samplers.hlsli">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="version.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="shaders\BSLightingShader\Default.hlsl">
+      <Filter>shaders\BSLightingShader</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\Lighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+  </ItemGroup>
+</Project>
