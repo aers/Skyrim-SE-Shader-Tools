@@ -8,6 +8,8 @@
 // 1<<10 Sss    #define SOFT_LIGHTING
 // 1<<11 Rim    #define RIM_LIGHTING
 // 1<<12 Bk     #define BACK_LIGHTING
+// 1<<13 Sh     #define SHADOW_DIR
+// 1<<14 DfSh   #define DEFSHADOW
 
 #include "include/CommonDefines.hlsli"
 #include "include/ConstantBuffers.hlsli"
@@ -80,6 +82,32 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
     int totalLightCount = min(7, NumLightNumShadowLight.x);
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+    int shadowLightCount = min(4, NumLightNumShadowLight.y);
+#endif
+    
+    // light shadow mask
+    // DEFSHADOW: has shadows, could be 0-4
+    // SHADOW_DIR: has directional light shadow so no need to check shadowed light count
+#if defined(DEFSHADOW) || defined(SHADOW_DIR)
+    float4 shadowMaskSample = float4(1, 1, 1, 1);
+#if !defined(SHADOW_DIR)
+    if (shadowLightCount > 0)
+    {
+#endif
+        float2 cb_DynamicRes_Inv = float2(DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.xy);
+        float2 cb_DynamicRes = float2(DynamicRes_WidthX_HeightY_PreviousWidthZ_PreviousHeightW.xy);
+        float cb_DynamicRes_WidthClamp = DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.z;
+
+        float2 shadowMaskPos = (cb_DynamicRes_Inv.xy * input.ProjectedVertexPos.xy * VPOSOffset.xy + VPOSOffset.zw) * cb_DynamicRes.xy;
+    
+        shadowMaskPos = clamp(float2(0, 0), float2(cb_DynamicRes_WidthClamp, cb_DynamicRes.y), shadowMaskPos);
+
+        shadowMaskSample = Sample2D(ShadowMask, shadowMaskPos).xyzw;
+#if !defined(SHADOW_DIR)
+    }
+#endif
+#endif
     
     // directional light
     diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColour.xyz, commonSpaceNormal.xyz);
@@ -113,7 +141,12 @@ PS_OUTPUT PSMain(PS_INPUT input)
         float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightColour, commonSpaceNormal.xyz);
         
 #if defined(SOFT_LIGHTING)
+#if defined(FIX_SOFT_LIGHTING)
+        lightDiffuseLighting += SoftLighting(lightDirectionN, lightColour, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
+
+#else
         lightDiffuseLighting += SoftLighting(lightDirection, lightColour, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
+#endif
 #endif
         
 #if defined(RIM_LIGHTING)
@@ -121,7 +154,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
         
 #if defined(BACK_LIGHTING)
-        lightDiffuseLighting += BackLighting(lightDirection, lightColour, backlightingMaskSample, commonSpaceNormal.xyz);
+        lightDiffuseLighting += BackLighting(lightDirectionN, lightColour, backlightingMaskSample, commonSpaceNormal.xyz);
 #endif
         
         diffuseLighting += lightAttenuation * lightDiffuseLighting;
