@@ -82,9 +82,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
     int totalLightCount = min(7, NumLightNumShadowLight.x);
-#if defined(DEFSHADOW) || defined(SHADOW_DIR)
     int shadowLightCount = min(4, NumLightNumShadowLight.y);
-#endif
     
     // light shadow mask
     // DEFSHADOW: has shadows, could be 0-4
@@ -110,7 +108,13 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
     // directional light
+#if defined(SHADOW_DIR)
+    float3 dirLightShadowedColour = DirLightColour.xyz * shadowMaskSample.x;
+    diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, dirLightShadowedColour, commonSpaceNormal.xyz);
+#else
     diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColour.xyz, commonSpaceNormal.xyz);
+#endif
+
 
 #if defined(SOFT_LIGHTING)
     diffuseLighting += SoftLighting(DirLightDirection.xyz, DirLightColour.xyz, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
@@ -125,20 +129,40 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
 #if defined(SPECULAR)
+#if defined(SHADOW_DIR)
+    specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
+#else
     specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, DirLightColour.xyz, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#endif
-    
+#endif    
     
     // point lights
     for (int currentLight = 0; currentLight < totalLightCount; currentLight++)
     {
+#if defined(DEFSHADOW)
+        float lightShadow = 1;
+        
+        if (currentLight < shadowLightCount)
+        {
+            int shadowMaskOffset = (int) dot(ShadowLightMaskSelect.xyzw, M_IdentityMatrix[currentLight].xyzw);
+            lightShadow = dot(shadowMaskSample.xyzw, M_IdentityMatrix[shadowMaskOffset].xyzw);
+
+        }
+#endif
+        
         float3 lightColour = PointLightColour[currentLight].xyz;
+#if defined(DEFSHADOW)
+        float3 lightShadowedColour = lightColour * lightShadow;
+#endif
     
         float3 lightDirection = PointLightPosition[currentLight].xyz - input.CommonSpaceVertexPos.xyz;
         float lightRadius = PointLightPosition[currentLight].w;
         float lightAttenuation = 1 - pow(saturate(length(lightDirection) / lightRadius), 2);
         float3 lightDirectionN = normalize(lightDirection);
+#if defined(DEFSHADOW)
+        float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightShadowedColour, commonSpaceNormal.xyz);
+#else
         float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightColour, commonSpaceNormal.xyz);
+#endif
         
 #if defined(SOFT_LIGHTING)
 #if defined(FIX_SOFT_LIGHTING)
@@ -160,6 +184,9 @@ PS_OUTPUT PSMain(PS_INPUT input)
         diffuseLighting += lightAttenuation * lightDiffuseLighting;
         
 #if defined(SPECULAR)
+#if defined(DEFSHADOW)
+        specularLighting += DirectionalLightSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
+#else
         specularLighting += DirectionalLightSpecular(lightDirectionN, lightColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
 #endif
     }

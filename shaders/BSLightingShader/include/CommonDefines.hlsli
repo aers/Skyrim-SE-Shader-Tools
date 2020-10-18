@@ -13,3 +13,14 @@
 #if defined(DRAW_IN_WORLDSPACE) || !defined(MODELSPACENORMALS)
 #define HAS_COMMON_TRANSFORM
 #endif
+
+#define M_PI  3.14159265358979323846 // PI
+#define M_2PI 6.28318530717958647692 // PI * 2
+
+const static float4x4 M_IdentityMatrix =
+{
+    { 1, 0, 0, 0 },
+    { 0, 1, 0, 0 },
+    { 0, 0, 1, 0 },
+    { 0, 0, 0, 1 }
+};
