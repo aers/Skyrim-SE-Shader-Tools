@@ -35,7 +35,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // diffuse texture   
     float4 diffuseSample = Sample2D(Diffuse, input.TexCoords.xy).xyzw;
     float3 diffuseColour = diffuseSample.xyz;
-    float  diffuseAlpha = diffuseSample.w;
+    float diffuseAlpha = diffuseSample.w;
     
     // normal texture and specular power
 #if defined(MODELSPACENORMALS)
@@ -43,7 +43,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float  specularPower = Sample2D(Specular, input.TexCoords.xy).x;
 #else
     float4 normalSample = Sample2D(Normal, input.TexCoords.xy).xyzw;
-    float  specularPower = normalSample.w;
+    float specularPower = normalSample.w;
 #endif    
     float3 normal = normalSample.xyz * 2.0 - 1.0;
     
@@ -62,7 +62,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // common space normal   
 #if defined(HAS_COMMON_TRANSFORM)
     float3x3 commonSpaceTransform = float3x3(input.CommonSpaceTransform0, input.CommonSpaceTransform1, input.CommonSpaceTransform2);
-    float4   commonSpaceNormal = float4(normalize(mul(commonSpaceTransform, normal)), 1);
+    float4 commonSpaceNormal = float4(normalize(mul(commonSpaceTransform, normal)), 1);
 #else
     float4 commonSpaceNormal = float4(normal.xyz, 1);
 #endif
@@ -115,7 +115,6 @@ PS_OUTPUT PSMain(PS_INPUT input)
     diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColour.xyz, commonSpaceNormal.xyz);
 #endif
 
-
 #if defined(SOFT_LIGHTING)
     diffuseLighting += SoftLighting(DirLightDirection.xyz, DirLightColour.xyz, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
 #endif
@@ -133,7 +132,8 @@ PS_OUTPUT PSMain(PS_INPUT input)
     specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
 #else
     specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, DirLightColour.xyz, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#endif    
+#endif   
+#endif
     
     // point lights
     for (int currentLight = 0; currentLight < totalLightCount; currentLight++)
@@ -188,6 +188,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
         specularLighting += DirectionalLightSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
 #else
         specularLighting += DirectionalLightSpecular(lightDirectionN, lightColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
+#endif
 #endif
     }
     
