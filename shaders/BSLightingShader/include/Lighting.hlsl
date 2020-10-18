@@ -16,6 +16,17 @@ float3 DirectionalLightSpecular(float3 vLightDirection, float3 vLightColour, flo
     return vLightColour * specIntensity;
 }
 
+float3 AnisotropicSpecular(float3 vLightDirectionN, float3 vLightColour, float fSpecularHardness, float3 vViewDirectionN, float3 vNormal, float3 vVertexNormal)
+{
+    float3 halfAngle = normalize(vLightDirectionN + vViewDirectionN);
+    float3 anisoDir = normalize(vNormal * 0.5 + vVertexNormal);
+
+    float anisoIntensity = 1 - min(1, abs(dot(anisoDir, vLightDirectionN) - dot(anisoDir, halfAngle)));
+    float spec = 0.7 * pow(anisoIntensity, fSpecularHardness);
+
+    return vLightColour * spec * max(0, vLightDirectionN.z);
+}
+
 // soft (wrap) lighting
 float3 SoftLighting(float3 vLightDirection, float3 vLightColor, float3 vSoftMask, float fSoftRolloff, float3 vNormal)
 {

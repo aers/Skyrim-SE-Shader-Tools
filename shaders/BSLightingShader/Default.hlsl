@@ -10,6 +10,8 @@
 // 1<<12 Bk     #define BACK_LIGHTING
 // 1<<13 Sh     #define SHADOW_DIR
 // 1<<14 DfSh   #define DEFSHADOW
+// 1<<15 Projuv #define PROJECTED_UV
+// 1<<16 (None) #define ANISO_LIGHTING
 
 #include "include/CommonDefines.hlsli"
 #include "include/ConstantBuffers.hlsli"
@@ -74,7 +76,53 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float3 vertexNormalN = normalize(vertexNormal);
 #endif
     
-    float3 diffuseLighting = 0; // total diffuse lighting contribution
+#if defined(PROJECTED_UV)
+    // ProjectedUVParams.z is probably UV tiling scale or something like that from the lighting property
+    float2 projectedUVCoords = input.TexCoords.zw * ProjectedUVParams.z;
+    float projUVNoiseSample = Sample2D(ProjectedNoise, projectedUVCoords.xy).x;
+    float3 projDirN = normalize(input.ProjectionDir.xyz);
+    float NdotP = dot(commonSpaceNormal.xyz, projDirN.xyz);
+    
+    float projDiffuseIntensity = NdotP * input.VertexColour.w - ProjectedUVParams.w - (ProjectedUVParams.x * projUVNoiseSample);
+    
+    float3 cb_ProjectedUVColour = ProjectedUVParams2.xyz;    
+    float gs_fProjectedUVDiffuseNormalTilingScale = ProjectedUVParams3.x;
+    float gs_fProjectedUVNormalDetailTilingScale = ProjectedUVParams3.y;    
+    float cb_EnableProjectedUVNormals = ProjectedUVParams3.w;
+    
+    if (cb_EnableProjectedUVNormals > 0.5)
+    {    
+        float3 projectedNormalSample = Sample2D(ProjectedNormal, gs_fProjectedUVDiffuseNormalTilingScale * projectedUVCoords).xyz;
+        float3 projectedNormal = projectedNormalSample * 2 - 1;
+        float3 projectedNormalDetailSample = Sample2D(ProjectedNormalDetail, gs_fProjectedUVNormalDetailTilingScale * projectedUVCoords).xyz;
+
+        float3 projectedNormalCombined = projectedNormalDetailSample * 2 + float3(projectedNormal.x, projectedNormal.y, -1);
+        projectedNormalCombined.xy = projectedNormalCombined.xy + float2(-1, -1);
+        projectedNormalCombined.z = projectedNormalCombined.z * projectedNormal.z;
+
+        float3 projectedNormalCombinedN = normalize(projectedNormalCombined);
+
+        float3 projectedDiffuseSample = Sample2D(ProjectedDiffuse, gs_fProjectedUVDiffuseNormalTilingScale * projectedUVCoords).xyz;
+
+        float projDiffuseIntensityInterpolation = smoothstep(-0.100000, 0.100000, projDiffuseIntensity);
+
+        // note that this only modifies the original normal, not the common space one that is used for lighting calculation
+        // it ends up only being used later on for the view space normal used for the normal map output which is used for later image space shaders
+        // unsure if this is a bug
+        normal.xyz = lerp(normal.xyz, projectedNormalCombinedN.xyz, projDiffuseIntensityInterpolation);
+        diffuseColour.xyz = lerp(diffuseColour, projectedDiffuseSample * cb_ProjectedUVColour, projDiffuseIntensityInterpolation);
+    }
+    else
+    {
+        if (projDiffuseIntensity > 0)
+        {
+            diffuseColour.xyz = cb_ProjectedUVColour.xyz;
+        }
+
+    }
+#endif
+    
+        float3 diffuseLighting = 0; // total diffuse lighting contribution
     
 #if defined(SPECULAR)
     float3 specularLighting = 0; // total specular lighting contribution
@@ -108,12 +156,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
     // directional light
+    float3 dirLightShadowedColour = DirLightColour.xyz;
 #if defined(SHADOW_DIR)
-    float3 dirLightShadowedColour = DirLightColour.xyz * shadowMaskSample.x;
-    diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, dirLightShadowedColour, commonSpaceNormal.xyz);
-#else
-    diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, DirLightColour.xyz, commonSpaceNormal.xyz);
+    dirLightShadowedColour *= shadowMaskSample.x;
 #endif
+    diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, dirLightShadowedColour, commonSpaceNormal.xyz);
 
 #if defined(SOFT_LIGHTING)
     diffuseLighting += SoftLighting(DirLightDirection.xyz, DirLightColour.xyz, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
@@ -128,11 +175,11 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
     
 #if defined(SPECULAR)
-#if defined(SHADOW_DIR)
+#if defined(ANISO_LIGHTING)
+    specularLighting += AnisotropicSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz, vertexNormal);
+ #else
     specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#else
-    specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, DirLightColour.xyz, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#endif   
+#endif
 #endif
     
     // point lights
@@ -150,19 +197,17 @@ PS_OUTPUT PSMain(PS_INPUT input)
 #endif
         
         float3 lightColour = PointLightColour[currentLight].xyz;
+        float3 lightShadowedColour = lightColour;
 #if defined(DEFSHADOW)
-        float3 lightShadowedColour = lightColour * lightShadow;
+        lightShadowedColour *= lightShadow;
 #endif
     
         float3 lightDirection = PointLightPosition[currentLight].xyz - input.CommonSpaceVertexPos.xyz;
         float lightRadius = PointLightPosition[currentLight].w;
         float lightAttenuation = 1 - pow(saturate(length(lightDirection) / lightRadius), 2);
         float3 lightDirectionN = normalize(lightDirection);
-#if defined(DEFSHADOW)
+
         float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightShadowedColour, commonSpaceNormal.xyz);
-#else
-        float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightColour, commonSpaceNormal.xyz);
-#endif
         
 #if defined(SOFT_LIGHTING)
 #if defined(FIX_SOFT_LIGHTING)
@@ -184,10 +229,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
         diffuseLighting += lightAttenuation * lightDiffuseLighting;
         
 #if defined(SPECULAR)
-#if defined(DEFSHADOW)
-        specularLighting += DirectionalLightSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
+#if defined(ANISO_LIGHTING)
+        specularLighting += AnisotropicSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz, vertexNormal);
 #else
-        specularLighting += DirectionalLightSpecular(lightDirectionN, lightColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
+        specularLighting += DirectionalLightSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
 #endif
 #endif
     }
