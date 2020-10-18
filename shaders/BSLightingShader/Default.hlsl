@@ -16,243 +16,68 @@
 #include "include/CommonDefines.hlsli"
 #include "include/ConstantBuffers.hlsli"
 #include "include/InputOutput.hlsli"
-#include "include/Samplers.hlsli"
 
 #if defined(PIXELSHADER)
 
+#include "include/Samplers.hlsli"
+#include "include/CommonPS.hlsl"
 #include "include/Lighting.hlsl"
+#if defined(PROJECTED_UV)
+#include "include/ProjectedUV.hlsl"
+#endif
 
 PS_OUTPUT PSMain(PS_INPUT input)
 {
     PS_OUTPUT output;
+    psInternalData data = (psInternalData) 0;
     
-    // view direction vector    
-#if defined(HAS_VIEW_DIRECTION_VECTOR_OUTPUT)
-    float3 viewDirection = normalize(input.ViewDirectionVec);
-#else
-    // sometimes used for calculations when there's no actual view direction
-    float3 viewDirection = normalize(float3(1, 1, 1));
-#endif
+    data.input = input;
     
-    // diffuse texture   
-    float4 diffuseSample = Sample2D(Diffuse, input.TexCoords.xy).xyzw;
-    float3 diffuseColour = diffuseSample.xyz;
-    float diffuseAlpha = diffuseSample.w;
+    GetViewDirection(data);
     
-    // normal texture and specular power
-#if defined(MODELSPACENORMALS)
-    float3 normalSample = Sample2D(Normal, input.TexCoords.xy).xyz;
-    float  specularPower = Sample2D(Specular, input.TexCoords.xy).x;
-#else
-    float4 normalSample = Sample2D(Normal, input.TexCoords.xy).xyzw;
-    float specularPower = normalSample.w;
-#endif    
-    float3 normal = normalSample.xyz * 2.0 - 1.0;
+    // diffuse from texture   
+    GetDiffuse(data);
+    
+    // normal from texture, calculated normals, and specular power
+    GetNormalsAndSpecularPower(data);
     
     // subsurface mask texture used for soft and rim lighting
 #if defined(SOFT_LIGHTING) || defined(RIM_LIGHTING)
-    float3 subsurfaceMaskSample = Sample2D(SubSurface, input.TexCoords.xy).xyz;
+    GetSubsurfaceMask(data);
 #endif    
-    float cb_LightingProperty_fSubSurfaceLightRolloff = LightingEffectParams.x;
-    float cb_LightingProperty_fRimLightPower = LightingEffectParams.y;
     
     // back lighting mask texture
 #if defined(BACK_LIGHTING)
-    float3 backlightingMaskSample = Sample2D(BackLightMask, input.TexCoords.xy).xyz;
-#endif
-    
-    // common space normal   
-#if defined(HAS_COMMON_TRANSFORM)
-    float3x3 commonSpaceTransform = float3x3(input.CommonSpaceTransform0, input.CommonSpaceTransform1, input.CommonSpaceTransform2);
-    float4 commonSpaceNormal = float4(normalize(mul(commonSpaceTransform, normal)), 1);
-#else
-    float4 commonSpaceNormal = float4(normal.xyz, 1);
-#endif
-    
-    // vertex normal used for some flags
-    // note that the common space transform is the TBN matrix
-#if defined(HAS_COMMON_TRANSFORM)
-    float3 vertexNormal = float3(commonSpaceTransform[0].z, commonSpaceTransform[1].z, commonSpaceTransform[2].z);
-    float3 vertexNormalN = normalize(vertexNormal);
+    GetBacklightMask(data);
 #endif
     
 #if defined(PROJECTED_UV)
-    // ProjectedUVParams.z is probably UV tiling scale or something like that from the lighting property
-    float2 projectedUVCoords = input.TexCoords.zw * ProjectedUVParams.z;
-    float projUVNoiseSample = Sample2D(ProjectedNoise, projectedUVCoords.xy).x;
-    float3 projDirN = normalize(input.ProjectionDir.xyz);
-    float NdotP = dot(commonSpaceNormal.xyz, projDirN.xyz);
-    
-    float projDiffuseIntensity = NdotP * input.VertexColour.w - ProjectedUVParams.w - (ProjectedUVParams.x * projUVNoiseSample);
-    
-    float3 cb_ProjectedUVColour = ProjectedUVParams2.xyz;    
-    float gs_fProjectedUVDiffuseNormalTilingScale = ProjectedUVParams3.x;
-    float gs_fProjectedUVNormalDetailTilingScale = ProjectedUVParams3.y;    
-    float cb_EnableProjectedUVNormals = ProjectedUVParams3.w;
-    
-    if (cb_EnableProjectedUVNormals > 0.5)
-    {    
-        float3 projectedNormalSample = Sample2D(ProjectedNormal, gs_fProjectedUVDiffuseNormalTilingScale * projectedUVCoords).xyz;
-        float3 projectedNormal = projectedNormalSample * 2 - 1;
-        float3 projectedNormalDetailSample = Sample2D(ProjectedNormalDetail, gs_fProjectedUVNormalDetailTilingScale * projectedUVCoords).xyz;
-
-        float3 projectedNormalCombined = projectedNormalDetailSample * 2 + float3(projectedNormal.x, projectedNormal.y, -1);
-        projectedNormalCombined.xy = projectedNormalCombined.xy + float2(-1, -1);
-        projectedNormalCombined.z = projectedNormalCombined.z * projectedNormal.z;
-
-        float3 projectedNormalCombinedN = normalize(projectedNormalCombined);
-
-        float3 projectedDiffuseSample = Sample2D(ProjectedDiffuse, gs_fProjectedUVDiffuseNormalTilingScale * projectedUVCoords).xyz;
-
-        float projDiffuseIntensityInterpolation = smoothstep(-0.100000, 0.100000, projDiffuseIntensity);
-
-        // note that this only modifies the original normal, not the common space one that is used for lighting calculation
-        // it ends up only being used later on for the view space normal used for the normal map output which is used for later image space shaders
-        // unsure if this is a bug
-        normal.xyz = lerp(normal.xyz, projectedNormalCombinedN.xyz, projDiffuseIntensityInterpolation);
-        diffuseColour.xyz = lerp(diffuseColour, projectedDiffuseSample * cb_ProjectedUVColour, projDiffuseIntensityInterpolation);
-    }
-    else
-    {
-        if (projDiffuseIntensity > 0)
-        {
-            diffuseColour.xyz = cb_ProjectedUVColour.xyz;
-        }
-
-    }
+    ApplyProjectedUV(data);
 #endif
-    
-        float3 diffuseLighting = 0; // total diffuse lighting contribution
     
 #if defined(SPECULAR)
-    float3 specularLighting = 0; // total specular lighting contribution
-    float specularHardness = SpecularColour.w;
+    GetSpecularHardness(data);
 #endif
     
-    int totalLightCount = min(7, NumLightNumShadowLight.x);
-    int shadowLightCount = min(4, NumLightNumShadowLight.y);
-    
-    // light shadow mask
-    // DEFSHADOW: has shadows, could be 0-4
-    // SHADOW_DIR: has directional light shadow so no need to check shadowed light count
-#if defined(DEFSHADOW) || defined(SHADOW_DIR)
-    float4 shadowMaskSample = float4(1, 1, 1, 1);
-#if !defined(SHADOW_DIR)
-    if (shadowLightCount > 0)
-    {
-#endif
-        float2 cb_DynamicRes_Inv = float2(DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.xy);
-        float2 cb_DynamicRes = float2(DynamicRes_WidthX_HeightY_PreviousWidthZ_PreviousHeightW.xy);
-        float cb_DynamicRes_WidthClamp = DynamicRes_InvWidthX_InvHeightY_WidthClampZ_HeightClampW.z;
-
-        float2 shadowMaskPos = (cb_DynamicRes_Inv.xy * input.ProjectedVertexPos.xy * VPOSOffset.xy + VPOSOffset.zw) * cb_DynamicRes.xy;
-    
-        shadowMaskPos = clamp(float2(0, 0), float2(cb_DynamicRes_WidthClamp, cb_DynamicRes.y), shadowMaskPos);
-
-        shadowMaskSample = Sample2D(ShadowMask, shadowMaskPos).xyzw;
-#if !defined(SHADOW_DIR)
-    }
-#endif
-#endif
+    // light counts and shadow mask
+    GetLightData(data);
     
     // directional light
-    float3 dirLightShadowedColour = DirLightColour.xyz;
-#if defined(SHADOW_DIR)
-    dirLightShadowedColour *= shadowMaskSample.x;
-#endif
-    diffuseLighting += DirectionalLightDiffuse(DirLightDirection.xyz, dirLightShadowedColour, commonSpaceNormal.xyz);
-
-#if defined(SOFT_LIGHTING)
-    diffuseLighting += SoftLighting(DirLightDirection.xyz, DirLightColour.xyz, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
-#endif
-    
-#if defined(RIM_LIGHTING)
-    diffuseLighting += RimLighting(DirLightDirection.xyz, DirLightColour.xyz, subsurfaceMaskSample, cb_LightingProperty_fRimLightPower, viewDirection, commonSpaceNormal.xyz);
-#endif
-    
-#if defined(BACK_LIGHTING)
-    diffuseLighting += BackLighting(DirLightDirection.xyz, DirLightColour.xyz, backlightingMaskSample, commonSpaceNormal.xyz);
-#endif
-    
-#if defined(SPECULAR)
-#if defined(ANISO_LIGHTING)
-    specularLighting += AnisotropicSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz, vertexNormal);
- #else
-    specularLighting += DirectionalLightSpecular(DirLightDirection.xyz, dirLightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#endif
-#endif
+    AddDirectionalLight(data);
     
     // point lights
-    for (int currentLight = 0; currentLight < totalLightCount; currentLight++)
-    {
-#if defined(DEFSHADOW)
-        float lightShadow = 1;
-        
-        if (currentLight < shadowLightCount)
-        {
-            int shadowMaskOffset = (int) dot(ShadowLightMaskSelect.xyzw, M_IdentityMatrix[currentLight].xyzw);
-            lightShadow = dot(shadowMaskSample.xyzw, M_IdentityMatrix[shadowMaskOffset].xyzw);
-
-        }
-#endif
-        
-        float3 lightColour = PointLightColour[currentLight].xyz;
-        float3 lightShadowedColour = lightColour;
-#if defined(DEFSHADOW)
-        lightShadowedColour *= lightShadow;
-#endif
-    
-        float3 lightDirection = PointLightPosition[currentLight].xyz - input.CommonSpaceVertexPos.xyz;
-        float lightRadius = PointLightPosition[currentLight].w;
-        float lightAttenuation = 1 - pow(saturate(length(lightDirection) / lightRadius), 2);
-        float3 lightDirectionN = normalize(lightDirection);
-
-        float3 lightDiffuseLighting = DirectionalLightDiffuse(lightDirectionN, lightShadowedColour, commonSpaceNormal.xyz);
-        
-#if defined(SOFT_LIGHTING)
-#if defined(FIX_SOFT_LIGHTING)
-        lightDiffuseLighting += SoftLighting(lightDirectionN, lightColour, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
-
-#else
-        lightDiffuseLighting += SoftLighting(lightDirection, lightColour, subsurfaceMaskSample, cb_LightingProperty_fSubSurfaceLightRolloff, commonSpaceNormal.xyz);
-#endif
-#endif
-        
-#if defined(RIM_LIGHTING)
-        lightDiffuseLighting += RimLighting(lightDirectionN, lightColour, subsurfaceMaskSample, cb_LightingProperty_fRimLightPower, viewDirection, commonSpaceNormal.xyz);
-#endif
-        
-#if defined(BACK_LIGHTING)
-        lightDiffuseLighting += BackLighting(lightDirectionN, lightColour, backlightingMaskSample, commonSpaceNormal.xyz);
-#endif
-        
-        diffuseLighting += lightAttenuation * lightDiffuseLighting;
-        
-#if defined(SPECULAR)
-#if defined(ANISO_LIGHTING)
-        specularLighting += AnisotropicSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz, vertexNormal);
-#else
-        specularLighting += DirectionalLightSpecular(lightDirectionN, lightShadowedColour, specularHardness, viewDirection, commonSpaceNormal.xyz);
-#endif
-#endif
-    }
+    AddPointLights(data);
     
     // directional ambient
-    float3 directionalAmbient = float3(
-        dot(DirectionalAmbient[0].xyzw, commonSpaceNormal.xyzw),
-        dot(DirectionalAmbient[1].xyzw, commonSpaceNormal.xyzw),
-        dot(DirectionalAmbient[2].xyzw, commonSpaceNormal.xyzw)
-        );
-    
-    diffuseLighting += directionalAmbient.xyz;
+    AddDirectionalAmbient(data);
     
     // emit colour
-    diffuseLighting += EmitColour.xyz;
+    AddEmit(data);
     
     // fake IBL
-    diffuseLighting += IBLParams.yzw * IBLParams.x;
+    AddIBL(data);
     
-    float3 outDiffuse = diffuseLighting * diffuseColour * input.VertexColour.xyz;
+    float3 outDiffuse = data.diffuseLighting * data.diffuseColour * input.VertexColour.xyz;
     
     // diffuse clamping
     float gs_fLightingOutputColourClampPostLit = ColourOutputClamp.x;
@@ -264,7 +89,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // add specular contribution
 #if defined(SPECULAR)
     float cb_LightingProperty_fSpecularLODFade = MaterialData.y;
-    float3 outSpecular = specularLighting * specularPower * cb_LightingProperty_fSpecularLODFade * SpecularColour.xyz;
+    float3 outSpecular = data.specularLighting * data.specularPower * cb_LightingProperty_fSpecularLODFade * SpecularColour.xyz;
     
     outColour += outSpecular;
     
@@ -288,7 +113,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // alpha
     float cb_LightingProperty_fAlpha = MaterialData.z;
     
-    float outAlpha = input.VertexColour.w * cb_LightingProperty_fAlpha * diffuseAlpha;
+    float outAlpha = input.VertexColour.w * cb_LightingProperty_fAlpha * data.diffuseAlpha;
     
     output.Colour.w = outAlpha;
     
@@ -310,7 +135,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // output normal 
     float3x3 viewSpaceTransform = float3x3(input.ViewSpaceTransform0, input.ViewSpaceTransform1, input.ViewSpaceTransform2);
     
-    float3 viewSpaceNormal = normalize(mul(viewSpaceTransform, normal.xyz));
+    float3 viewSpaceNormal = normalize(mul(viewSpaceTransform, data.normal.xyz));
     viewSpaceNormal.z = max(0.001, sqrt(viewSpaceNormal.z * -8 + 8));
     
     output.Normal.xy = float2(0.5, 0.5) + (viewSpaceNormal.xy / viewSpaceNormal.z);
@@ -321,7 +146,7 @@ PS_OUTPUT PSMain(PS_INPUT input)
     float cb_SpecMaskEnd = SSRParams.y;
     float gs_fSpecularLODFade = SSRParams.w;    
 
-    output.Normal.w = gs_fSpecularLODFade * smoothstep(cb_SpecMaskBegin - 0.000010, cb_SpecMaskEnd, specularPower);
+    output.Normal.w = gs_fSpecularLODFade * smoothstep(cb_SpecMaskBegin - 0.000010, cb_SpecMaskEnd, data.specularPower);
     
     return output;
 }

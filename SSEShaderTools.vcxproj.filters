@@ -55,5 +55,11 @@
     <FxCompile Include="shaders\BSLightingShader\include\Lighting.hlsl">
       <Filter>shaders\BSLightingShader\include</Filter>
     </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\CommonPS.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\ProjectedUV.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
