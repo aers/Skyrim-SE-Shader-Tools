@@ -28,7 +28,6 @@
 
 PS_OUTPUT PSMain(PS_INPUT input)
 {
-    PS_OUTPUT output;
     psInternalData data = (psInternalData) 0;
     
     data.input = input;
@@ -77,78 +76,35 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // fake IBL
     AddIBL(data);
     
-    float3 outDiffuse = data.diffuseLighting * data.diffuseColour * input.VertexColour.xyz;
-    
-    // diffuse clamping
-    float gs_fLightingOutputColourClampPostLit = ColourOutputClamp.x;
-    
-    outDiffuse = min(outDiffuse, gs_fLightingOutputColourClampPostLit);
-   
-    float3 outColour = outDiffuse;    
+    GetOutDiffuse(data);
         
     // add specular contribution
 #if defined(SPECULAR)
-    float cb_LightingProperty_fSpecularLODFade = MaterialData.y;
-    float3 outSpecular = data.specularLighting * data.specularPower * cb_LightingProperty_fSpecularLODFade * SpecularColour.xyz;
-    
-    outColour += outSpecular;
-    
-    float gs_fLightingOutputColourClampPostSpec = ColourOutputClamp.z;
-    outColour = min(outColour, gs_fLightingOutputColourClampPostSpec);
+    AddOutSpecular(data);
 #endif    
     
     // fog
-    float cb_FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
-    float cb_AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z;
-    float shouldFogOutput = cb_FirstPerson * cb_AlphaPass;  
-    float cb_fInvFrameBufferRange = FogColour.w;
+    ApplyFog(data);
     
-    float3 fogColour = input.FogParam.xyz;
-    float fogAmount = input.FogParam.w;   
-    
-    float3 foggedColour = lerp(outColour, fogColour, fogAmount) * cb_fInvFrameBufferRange;
-    
-    output.Colour.xyz = lerp(outColour, foggedColour, shouldFogOutput);
+    data.output.Colour.xyz = data.outColour;
     
     // alpha
     float cb_LightingProperty_fAlpha = MaterialData.z;
     
     float outAlpha = input.VertexColour.w * cb_LightingProperty_fAlpha * data.diffuseAlpha;
     
-    output.Colour.w = outAlpha;
+    data.output.Colour.w = outAlpha;
     
     // motion vector
-    float2 currProjPosition = float2(dot(ViewProjMatrixUnjittered[0].xyzw, input.WorldVertexPos.xyzw), dot(ViewProjMatrixUnjittered[1].xyzw, input.WorldVertexPos.xyzw)) / dot(ViewProjMatrixUnjittered[3].xyzw, input.WorldVertexPos.xyzw);
-    float2 prevProjPosition = float2(dot(PreviousViewProjMatrixUnjittered[0].xyzw, input.PreviousWorldVertexPos.xyzw), dot(PreviousViewProjMatrixUnjittered[1].xyzw, input.PreviousWorldVertexPos.xyzw)) / dot(PreviousViewProjMatrixUnjittered[3].xyzw, input.PreviousWorldVertexPos.xyzw);
-    float2 motionVector = (currProjPosition - prevProjPosition) * float2(-0.5, 0.5);
-    
-    if (SSRParams.z > 0.000010)
-    {
-        output.MotionVector.xy = float2(1, 0);
-    }
-    else
-    {
-        output.MotionVector.xy = motionVector.xy;
-    }    
-    output.MotionVector.zw = float2(0, 1);    
+    SetOutputMotionVector(data);
     
     // output normal 
-    float3x3 viewSpaceTransform = float3x3(input.ViewSpaceTransform0, input.ViewSpaceTransform1, input.ViewSpaceTransform2);
-    
-    float3 viewSpaceNormal = normalize(mul(viewSpaceTransform, data.normal.xyz));
-    viewSpaceNormal.z = max(0.001, sqrt(viewSpaceNormal.z * -8 + 8));
-    
-    output.Normal.xy = float2(0.5, 0.5) + (viewSpaceNormal.xy / viewSpaceNormal.z);
-    output.Normal.z = 0;
+    SetOutputNormal(data);
     
     // output normal alpha stores a specular mask for use by other shaders
-    float cb_SpecMaskBegin = SSRParams.x;
-    float cb_SpecMaskEnd = SSRParams.y;
-    float gs_fSpecularLODFade = SSRParams.w;    
-
-    output.Normal.w = gs_fSpecularLODFade * smoothstep(cb_SpecMaskBegin - 0.000010, cb_SpecMaskEnd, data.specularPower);
+    SetOutputSpecMask(data);
     
-    return output;
+    return data.output;
 }
 
 #endif

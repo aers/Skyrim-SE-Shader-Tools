@@ -2,6 +2,7 @@
 struct psInternalData
 {
     PS_INPUT    input;
+    PS_OUTPUT   output;
     float3      viewDirection;
     float3      diffuseColour;
     float       diffuseAlpha;
@@ -18,6 +19,9 @@ struct psInternalData
     float4      shadowMask;
     float3      subsurfaceMask;
     float3      backlightMask;
+    float3      outDiffuse;
+    float3      outSpecular;
+    float3      outColour;
 };
 
 void GetViewDirection(inout psInternalData data)
@@ -67,4 +71,79 @@ void GetNormalsAndSpecularPower(inout psInternalData data)
 void GetSpecularHardness(inout psInternalData data)
 {
     data.specularLighting = SpecularColour.w;
+}
+
+void GetOutDiffuse(inout psInternalData data)
+{
+    data.outDiffuse = data.diffuseLighting * data.diffuseColour * data.input.VertexColour.xyz;
+    
+    // diffuse clamping
+    float gs_fLightingOutputColourClampPostLit = ColourOutputClamp.x;
+    
+    data.outDiffuse = min(data.outDiffuse, gs_fLightingOutputColourClampPostLit);
+   
+    data.outColour = data.outDiffuse;
+}
+
+void AddOutSpecular(inout psInternalData data)
+{
+    float cb_LightingProperty_fSpecularLODFade = MaterialData.y;
+    data.outSpecular = data.specularLighting * data.specularPower * cb_LightingProperty_fSpecularLODFade * SpecularColour.xyz;
+    
+    data.outColour += data.outSpecular;
+    
+    float gs_fLightingOutputColourClampPostSpec = ColourOutputClamp.z;
+    data.outColour = min(data.outColour, gs_fLightingOutputColourClampPostSpec);
+}
+
+void ApplyFog(inout psInternalData data)
+{
+    float cb_FirstPerson = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.y;
+    float cb_AlphaPass = GammaInvX_FirstPersonY_AlphaPassZ_CreationKitW.z;
+    float shouldFogOutput = cb_FirstPerson * cb_AlphaPass;
+    float cb_fInvFrameBufferRange = FogColour.w;
+    
+    float3 fogColour = data.input.FogParam.xyz;
+    float fogAmount = data.input.FogParam.w;
+    
+    float3 foggedColour = lerp(data.outColour, fogColour, fogAmount) * cb_fInvFrameBufferRange;
+    
+    data.outColour = lerp(data.outColour, foggedColour, shouldFogOutput);
+}
+
+void SetOutputMotionVector(inout psInternalData data)
+{
+    float2 currProjPosition = float2(dot(ViewProjMatrixUnjittered[0].xyzw, data.input.WorldVertexPos.xyzw), dot(ViewProjMatrixUnjittered[1].xyzw, data.input.WorldVertexPos.xyzw)) / dot(ViewProjMatrixUnjittered[3].xyzw, data.input.WorldVertexPos.xyzw);
+    float2 prevProjPosition = float2(dot(PreviousViewProjMatrixUnjittered[0].xyzw, data.input.PreviousWorldVertexPos.xyzw), dot(PreviousViewProjMatrixUnjittered[1].xyzw, data.input.PreviousWorldVertexPos.xyzw)) / dot(PreviousViewProjMatrixUnjittered[3].xyzw, data.input.PreviousWorldVertexPos.xyzw);
+    float2 motionVector = (currProjPosition - prevProjPosition) * float2(-0.5, 0.5);
+    
+    if (SSRParams.z > 0.000010)
+    {
+        data.output.MotionVector.xy = float2(1, 0);
+    }
+    else
+    {
+        data.output.MotionVector.xy = motionVector.xy;
+    }
+    data.output.MotionVector.zw = float2(0, 1);
+}
+
+void SetOutputNormal(inout psInternalData data)
+{
+    float3x3 viewSpaceTransform = float3x3(data.input.ViewSpaceTransform0, data.input.ViewSpaceTransform1, data.input.ViewSpaceTransform2);
+    
+    float3 viewSpaceNormal = normalize(mul(viewSpaceTransform, data.normal.xyz));
+    viewSpaceNormal.z = max(0.001, sqrt(viewSpaceNormal.z * -8 + 8));
+    
+    data.output.Normal.xy = float2(0.5, 0.5) + (viewSpaceNormal.xy / viewSpaceNormal.z);
+    data.output.Normal.z = 0;
+}
+
+void SetOutputSpecMask(inout psInternalData data)
+{
+    float cb_SpecMaskBegin = SSRParams.x;
+    float cb_SpecMaskEnd = SSRParams.y;
+    float gs_fSpecularLODFade = SSRParams.w;
+
+    data.output.Normal.w = gs_fSpecularLODFade * smoothstep(cb_SpecMaskBegin - 0.000010, cb_SpecMaskEnd, data.specularPower);
 }
