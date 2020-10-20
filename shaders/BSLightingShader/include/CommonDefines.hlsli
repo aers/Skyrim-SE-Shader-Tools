@@ -24,3 +24,7 @@ const static float4x4 M_IdentityMatrix =
     { 0, 0, 1, 0 },
     { 0, 0, 0, 1 }
 };
+
+#if defined(ADDITIONAL_ALPHA_MASK)
+const static float AAMMatrix[] = { 0.003922, 0.533333, 0.133333, 0.666667, 0.800000, 0.266667, 0.933333, 0.400000, 0.200000, 0.733333, 0.066667, 0.600000, 0.996078, 0.466667, 0.866667, 0.333333 };
+#endif

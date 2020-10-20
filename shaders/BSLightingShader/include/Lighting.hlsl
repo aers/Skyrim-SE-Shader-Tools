@@ -187,6 +187,38 @@ void AddIBL(inout psInternalData data)
     data.diffuseLighting += IBLParams.yzw * IBLParams.x;
 }
 
+void AddCharacterLight(inout psInternalData data)
+{
+    float gs_CharacterLightingStrengthPrimary = CharacterLightParams.x;
+    float gs_CharacterLightingStrengthSecondary = CharacterLightParams.y;
+    float gs_CharacterLightingStrengthLuminance = CharacterLightParams.z;
+    float gs_CharacterLightingStrengthMaxLuminance = CharacterLightParams.w;
+
+    float primaryIntensity = saturate(dot(data.viewDirection, data.commonSpaceNormal.xyz));
+    // TODO: these constants are probably something simple
+    float secondaryIntensity = saturate(dot(float2(0.164399, -0.986394), data.commonSpaceNormal.yz));
+
+    float characterLightingStrength = primaryIntensity * gs_CharacterLightingStrengthPrimary + secondaryIntensity * gs_CharacterLightingStrengthSecondary;
+    float noise = Sample2D(ProjectedNoise, float2(1, 1)).x;
+    float characterLightingLuminance = clamp(gs_CharacterLightingStrengthLuminance * noise, 0, gs_CharacterLightingStrengthMaxLuminance);
+    
+    data.diffuseLighting += characterLightingStrength * characterLightingLuminance;
+}
+
+void GetAmbientSpecular(inout psInternalData data)
+{
+    float ambientSpecularIntensity = pow(1 - saturate(dot(data.commonSpaceNormal.xyz, data.viewDirection)), AmbientSpecularTintAndFresnelPower.w);
+    float4 commonSpaceNormal_AS = float4(data.commonSpaceNormal.xyz, 0.15);
+    float3 ambientSpecularColor = AmbientSpecularTintAndFresnelPower.xyz *
+        float3(
+            saturate(dot(DirectionalAmbient[0].xyzw, commonSpaceNormal_AS.xyzw)),
+            saturate(dot(DirectionalAmbient[1].xyzw, commonSpaceNormal_AS.xyzw)),
+            saturate(dot(DirectionalAmbient[2].xyzw, commonSpaceNormal_AS.xyzw))
+            );
+
+    data.ambientSpecular = ambientSpecularColor * ambientSpecularIntensity;
+}
+
 // additional lighting texture samples
 void GetSubsurfaceMask(inout psInternalData data)
 {
@@ -197,3 +229,4 @@ void GetBacklightMask(inout psInternalData data)
 {
     data.backlightMask = Sample2D(BackLightMask, data.input.TexCoords.xy).xyz;
 }
+

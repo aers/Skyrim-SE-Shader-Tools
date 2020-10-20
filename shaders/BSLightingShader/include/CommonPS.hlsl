@@ -19,6 +19,7 @@ struct psInternalData
     float4      shadowMask;
     float3      subsurfaceMask;
     float3      backlightMask;
+    float3      ambientSpecular;
     float3      outDiffuse;
     float3      outSpecular;
     float3      outColour;
@@ -87,10 +88,15 @@ void GetOutDiffuse(inout psInternalData data)
 
 void AddOutSpecular(inout psInternalData data)
 {
+#if defined(SPECULAR)
     float cb_LightingProperty_fSpecularLODFade = MaterialData.y;
     data.outSpecular = data.specularLighting * data.specularPower * cb_LightingProperty_fSpecularLODFade * SpecularColour.xyz;
     
     data.outColour += data.outSpecular;
+#endif
+#if defined(AMBIENT_SPECULAR)
+    data.outColour += data.ambientSpecular;
+#endif
     
     float gs_fLightingOutputColourClampPostSpec = ColourOutputClamp.z;
     data.outColour = min(data.outColour, gs_fLightingOutputColourClampPostSpec);
@@ -109,6 +115,31 @@ void ApplyFog(inout psInternalData data)
     float3 foggedColour = lerp(data.outColour, fogColour, fogAmount) * cb_fInvFrameBufferRange;
     
     data.outColour = lerp(data.outColour, foggedColour, shouldFogOutput);
+}
+
+void SetOutputColor(inout psInternalData data)
+{
+    data.output.Colour.xyz = data.outColour;
+}
+
+void SetOutputAlpha(inout psInternalData data)
+{
+#if defined(ADDITIONAL_ALPHA_MASK)
+    float outAlpha = data.input.VertexColour.w * data.diffuseAlpha;
+#else
+    float cb_LightingProperty_fAlpha = MaterialData.z;
+    
+    float outAlpha = data.input.VertexColour.w * cb_LightingProperty_fAlpha * data.diffuseAlpha;
+#endif
+    
+#if defined(DO_ALPHA_TEST)
+    if (outAlpha - AlphaTestRefCB.x < 0)
+    {
+        discard;
+    }
+#endif
+    
+    data.output.Colour.w = outAlpha;
 }
 
 void SetOutputMotionVector(inout psInternalData data)
@@ -146,4 +177,21 @@ void SetOutputSpecMask(inout psInternalData data)
     float gs_fSpecularLODFade = SSRParams.w;
 
     data.output.Normal.w = gs_fSpecularLODFade * smoothstep(cb_SpecMaskBegin - 0.000010, cb_SpecMaskEnd, data.specularPower);
+}
+
+void DoAAMTest(inout psInternalData data)
+{
+    float cb_LightingProperty_fAlpha = MaterialData.z;
+    uint2 projVertexPosTrunc = (uint2) data.input.ProjectedVertexPos.xy;
+
+    // 0xC - 0b1100
+    // 0x3 - 0b0011
+    uint AAMIndex = (projVertexPosTrunc.x << 2) & 0xC | (projVertexPosTrunc.y) & 0x3;
+
+    float AAM = cb_LightingProperty_fAlpha - AAMMatrix[AAMIndex];
+    
+    if (AAM < 0)
+    {
+        discard;
+    }
 }

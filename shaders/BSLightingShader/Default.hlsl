@@ -12,6 +12,10 @@
 // 1<<14 DfSh   #define DEFSHADOW
 // 1<<15 Projuv #define PROJECTED_UV
 // 1<<16 (None) #define ANISO_LIGHTING
+// 1<<17 Aspc   #define AMBIENT_SPECULAR
+// 1<<20 Atest  #define DO_ALPHA_TEST
+// 1<<22 (None) #define CHARACTER_LIGHT
+// 1<<23 (Aam)  #define ADDITIONAL_ALPHA_MASK
 
 #include "include/CommonDefines.hlsli"
 #include "include/ConstantBuffers.hlsli"
@@ -67,6 +71,10 @@ PS_OUTPUT PSMain(PS_INPUT input)
     // point lights
     AddPointLights(data);
     
+#if defined(CHARACTER_LIGHT)
+    AddCharacterLight(data);
+#endif
+    
     // directional ambient
     AddDirectionalAmbient(data);
     
@@ -77,23 +85,26 @@ PS_OUTPUT PSMain(PS_INPUT input)
     AddIBL(data);
     
     GetOutDiffuse(data);
+
+#if defined(AMBIENT_SPECULAR)
+    GetAmbientSpecular(data);
+#endif
         
     // add specular contribution
-#if defined(SPECULAR)
+#if defined(SPECULAR) || defined(AMBIENT_SPECULAR)
     AddOutSpecular(data);
-#endif    
+#endif
     
     // fog
     ApplyFog(data);
     
-    data.output.Colour.xyz = data.outColour;
+    SetOutputColor(data);
     
-    // alpha
-    float cb_LightingProperty_fAlpha = MaterialData.z;
+#if defined(ADDITIONAL_ALPHA_MASK)
+    DoAAMTest(data);
+#endif
     
-    float outAlpha = input.VertexColour.w * cb_LightingProperty_fAlpha * data.diffuseAlpha;
-    
-    data.output.Colour.w = outAlpha;
+    SetOutputAlpha(data);
     
     // motion vector
     SetOutputMotionVector(data);
