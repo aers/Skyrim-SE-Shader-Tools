@@ -246,7 +246,12 @@
     <ResourceCompile Include="version.rc" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="shaders\BSLightingShader\include\AnisotropicLighting.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\BackLighting.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\BlinnPhong.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\CharacterLighting.hlsl" />
     <FxCompile Include="shaders\BSLightingShader\include\CommonPS.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\DirectionalLight.hlsl" />
     <FxCompile Include="shaders\BSLightingShader\include\Lighting.hlsl" />
     <FxCompile Include="shaders\BSLightingShader\Default.hlsl">
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">PSMain</EntryPointName>
@@ -258,6 +263,8 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
     </FxCompile>
     <FxCompile Include="shaders\BSLightingShader\include\ProjectedUV.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\RimLighting.hlsl" />
+    <FxCompile Include="shaders\BSLightingShader\include\SoftLighting.hlsl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

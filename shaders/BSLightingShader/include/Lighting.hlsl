@@ -1,4 +1,12 @@
-// lighting functions
+#include "AnisotropicLighting.hlsl"
+#include "BackLighting.hlsl"
+#include "CharacterLighting.hlsl"
+#include "RimLighting.hlsl"
+#include "SoftLighting.hlsl"
+
+#include "DirectionalLight.hlsl"
+#include "PointLight.hlsl"
+
 void GetLightData(inout psInternalData data)
 {
     data.totalLightCount = min(7, NumLightNumShadowLight.x);
@@ -29,94 +37,6 @@ void GetLightData(inout psInternalData data)
 }
 
 // main light functions
-
-// Blinn-Phong diffuse
-float3 DirectionalLightDiffuse(float3 vLightDirection, float3 vLightColour, float3 vNormal)
-{
-    float lightIntensity = saturate(dot(vNormal, vLightDirection));
-    return vLightColour * lightIntensity;
-}
-
-// Blinn-Phong specular
-float3 DirectionalLightSpecular(float3 vLightDirection, float3 vLightColour, float fSpecularHardness, float3 vViewDirection, float3 vNormal)
-{
-    float3 halfAngle = normalize(vLightDirection + vViewDirection);
-    float specIntensity = pow(saturate(dot(halfAngle, vNormal)), fSpecularHardness);
-
-    return vLightColour * specIntensity;
-}
-
-float3 AnisotropicSpecular(float3 vLightDirectionN, float3 vLightColour, float fSpecularHardness, float3 vViewDirectionN, float3 vNormal, float3 vVertexNormal)
-{
-    float3 halfAngle = normalize(vLightDirectionN + vViewDirectionN);
-    float3 anisoDir = normalize(vNormal * 0.5 + vVertexNormal);
-
-    float anisoIntensity = 1 - min(1, abs(dot(anisoDir, vLightDirectionN) - dot(anisoDir, halfAngle)));
-    float spec = 0.7 * pow(anisoIntensity, fSpecularHardness);
-
-    return vLightColour * spec * max(0, vLightDirectionN.z);
-}
-
-// soft (wrap) lighting
-float3 SoftLighting(float3 vLightDirection, float3 vLightColor, float3 vSoftMask, float fSoftRolloff, float3 vNormal)
-{
-    float softIntensity = dot(vNormal, vLightDirection);
-    
-    // can't be entirely sure what their original code looks like but this generates shader asm that does the same thing
-    // generates t * t * (3-2*t) where t = the wrap (NdotL + fSoftRolloff/1 + fSoftRolloff)
-    float softWrap = smoothstep(-fSoftRolloff, 1.0, softIntensity);
-    float soft = saturate(softWrap - smoothstep(0, 1.0, softIntensity));
-
-    return vLightColor * vSoftMask * soft;
-}
-
-// rim lighting
-float3 RimLighting(float3 vLightDirectionN, float3 vLightColour, float3 vRimMask, float fRimPower, float3 vViewDirectionN, float3 vNormal)
-{
-    float NdotV = saturate(dot(vNormal, vViewDirectionN));
-    
-    float rimIntensity = pow(1 - NdotV, fRimPower);
-    float rim = saturate(dot(vViewDirectionN, -vLightDirectionN)) * rimIntensity;
-
-    return vLightColour * vRimMask * rim;
-}
-
-float3 BackLighting(float3 vLightDirectionN, float3 vLightColor, float3 vBackMask, float3 vNormal)
-{
-    float backIntensity = dot(vNormal, -vLightDirectionN);
-
-    return vLightColor * vBackMask * backIntensity;
-}
-
-float3 GetDirectionalDiffuse(inout psInternalData data, float3 lightDirection, float3 lightColour, float3 shadowColour)
-{
-    float3 diffuseLight = DirectionalLightDiffuse(lightDirection, shadowColour, data.commonSpaceNormal.xyz);
-    
-#if defined(SOFT_LIGHTING)
-    float cb_LightingProperty_fSubSurfaceLightRolloff = LightingEffectParams.x;
-    diffuseLight += SoftLighting(lightDirection, lightColour, data.subsurfaceMask, cb_LightingProperty_fSubSurfaceLightRolloff, data.commonSpaceNormal.xyz);
-#endif
-    
-#if defined(RIM_LIGHTING)
-    float cb_LightingProperty_fRimLightPower = LightingEffectParams.y;
-    diffuseLight += RimLighting(lightDirection, lightColour, data.subsurfaceMask, cb_LightingProperty_fRimLightPower, data.viewDirection, data.commonSpaceNormal.xyz);
-#endif
-    
-#if defined(BACK_LIGHTING)
-    diffuseLight += BackLighting(lightDirection, lightColour, data.backlightMask, data.commonSpaceNormal.xyz);
-#endif
-    
-    return diffuseLight;
-}
-
-float3 GetDirectionalSpecular(inout psInternalData data, float3 lightDirection, float3 lightColour)
-{
-#if defined(ANISO_LIGHTING)
-    return AnisotropicSpecular(lightDirection, lightColour, data.specularHardness, data.viewDirection, data.commonSpaceNormal.xyz, data.vertexNormal);
-#else
-    return DirectionalLightSpecular(lightDirection, lightColour, data.specularHardness, data.viewDirection, data.commonSpaceNormal.xyz);
-#endif
-}
 
 void AddDirectionalLight(inout psInternalData data)
 {
@@ -187,23 +107,7 @@ void AddIBL(inout psInternalData data)
     data.diffuseLighting += IBLParams.yzw * IBLParams.x;
 }
 
-void AddCharacterLight(inout psInternalData data)
-{
-    float gs_CharacterLightingStrengthPrimary = CharacterLightParams.x;
-    float gs_CharacterLightingStrengthSecondary = CharacterLightParams.y;
-    float gs_CharacterLightingStrengthLuminance = CharacterLightParams.z;
-    float gs_CharacterLightingStrengthMaxLuminance = CharacterLightParams.w;
 
-    float primaryIntensity = saturate(dot(data.viewDirection, data.commonSpaceNormal.xyz));
-    // TODO: these constants are probably something simple
-    float secondaryIntensity = saturate(dot(float2(0.164399, -0.986394), data.commonSpaceNormal.yz));
-
-    float characterLightingStrength = primaryIntensity * gs_CharacterLightingStrengthPrimary + secondaryIntensity * gs_CharacterLightingStrengthSecondary;
-    float noise = Sample2D(ProjectedNoise, float2(1, 1)).x;
-    float characterLightingLuminance = clamp(gs_CharacterLightingStrengthLuminance * noise, 0, gs_CharacterLightingStrengthMaxLuminance);
-    
-    data.diffuseLighting += characterLightingStrength * characterLightingLuminance;
-}
 
 void GetAmbientSpecular(inout psInternalData data)
 {
@@ -220,13 +124,7 @@ void GetAmbientSpecular(inout psInternalData data)
 }
 
 // additional lighting texture samples
-void GetSubsurfaceMask(inout psInternalData data)
-{
-    data.subsurfaceMask = Sample2D(SubSurface, data.input.TexCoords.xy).xyz;
-}
 
-void GetBacklightMask(inout psInternalData data)
-{
-    data.backlightMask = Sample2D(BackLightMask, data.input.TexCoords.xy).xyz;
-}
+
+
 

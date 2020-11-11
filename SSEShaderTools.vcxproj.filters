@@ -61,5 +61,26 @@
     <FxCompile Include="shaders\BSLightingShader\include\ProjectedUV.hlsl">
       <Filter>shaders\BSLightingShader\include</Filter>
     </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\AnisotropicLighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\BackLighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\CharacterLighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\DirectionalLight.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\RimLighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\SoftLighting.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
+    <FxCompile Include="shaders\BSLightingShader\include\BlinnPhong.hlsl">
+      <Filter>shaders\BSLightingShader\include</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
